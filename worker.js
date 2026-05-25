@@ -731,7 +731,7 @@ async function renderAdmin(req, env, flash = "") {
   <td>${v.created_at ? timeAgo(v.created_at) : "-"}</td>
   <td>
     <div class="actions">
-      <button class="btn btn-ghost btn-sm" onclick="editVideo(${JSON.stringify(JSON.stringify(v))})">Edit</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="editVideo(${escHtml(JSON.stringify(JSON.stringify(v)))})">Edit</button>
       <form method="POST" action="/admin/delete" style="display:inline" onsubmit="return confirm('Hapus video ini?')">
         <input type="hidden" name="id" value="${escHtml(v.id)}">
         <button type="submit" class="btn btn-danger btn-sm">Hapus</button>
@@ -858,32 +858,32 @@ async function renderAdmin(req, env, flash = "") {
           <label>Paste link-link videy di sini (satu per baris atau campur dengan teks lain)</label>
           <textarea id="bulk-input" rows="8" placeholder="cdn.videy.co/hQF0u32U1.mp4&#10;https://cdn.videy.co/xYz123.mp4&#10;https://videy.co/v?id=hQF0u32U1&#10;https://videvideoy.site/u3lun&#10;https://other-host.com/video.mp4&#10;&#10;Format yang didukung:&#10;• cdn.videy.co/{id}.mp4 → langsung dipakai&#10;• URL .mp4 lainnya → langsung dipakai&#10;• Link dengan ?id= → dikonversi ke CDN" style="width:100%;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical"></textarea>
         </div>
+        <div id="bulk-scan-info" style="display:none;margin-bottom:10px;font-size:0.82rem;color:var(--text);padding:10px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--bg2)"></div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <div class="form-group" style="margin:0;flex:1;min-width:160px">
             <input type="text" id="bulk-category" list="cat-list-bulk" placeholder="Kategori (opsional)" style="width:100%;padding:9px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.875rem;outline:none">
             <datalist id="cat-list-bulk">${catOptions}</datalist>
           </div>
-          <button class="btn btn-primary" onclick="bulkScan()" style="flex-shrink:0">🔍 Scan Link</button>
+          <button type="button" class="btn btn-primary" onclick="bulkScan()" style="flex-shrink:0">🔍 Scan Link</button>
         </div>
       </div>
-      <div id="bulk-scan-info" style="display:none;margin-top:10px;font-size:0.8rem;color:var(--muted);padding:8px 12px;border-radius:8px;background:var(--bg3)"></div>
 
       <!-- Step 2: Preview results -->
       <div id="bulk-step2" style="display:none">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
           <div style="font-size:0.875rem">
             <span id="bulk-count" style="font-weight:700;color:var(--accent2)"></span>
-            <button onclick="bulkBack()" style="margin-left:12px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.8rem;text-decoration:underline">← Edit ulang</button>
+            <button type="button" onclick="bulkBack()" style="margin-left:12px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.8rem;text-decoration:underline">← Edit ulang</button>
           </div>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-ghost btn-sm" onclick="bulkSelectAll(true)">Pilih Semua</button>
-            <button class="btn btn-ghost btn-sm" onclick="bulkSelectAll(false)">Batal Semua</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="bulkSelectAll(true)">Pilih Semua</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="bulkSelectAll(false)">Batal Semua</button>
           </div>
         </div>
         <div id="bulk-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"></div>
         <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
-          <button class="btn btn-ghost" onclick="bulkBack()">Batal</button>
-          <button class="btn btn-primary" id="bulk-submit-btn" onclick="bulkSubmit()">💾 Simpan yang Dipilih</button>
+          <button type="button" class="btn btn-ghost" onclick="bulkBack()">Batal</button>
+          <button type="button" class="btn btn-primary" id="bulk-submit-btn" onclick="bulkSubmit()">💾 Simpan yang Dipilih</button>
         </div>
         <div id="bulk-progress" style="display:none;margin-top:12px">
           <div style="background:var(--bg2);border-radius:6px;overflow:hidden;height:8px">
@@ -1065,8 +1065,10 @@ async function bulkFetchTitles() {
 
 function bulkScan() {
   var info = document.getElementById('bulk-scan-info');
+  if (!info) { alert('Error: elemen bulk-scan-info tidak ditemukan. Coba refresh halaman.'); return; }
   info.style.display = 'block';
   info.innerHTML = '⏳ Memproses...';
+  info.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   try {
     var text = document.getElementById('bulk-input').value.trim();
     if (!text) {
