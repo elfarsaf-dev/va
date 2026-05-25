@@ -12,10 +12,10 @@ version = "1.0.0"
 [[services]]
 name = "web"
 paths = [ "/" ]
-localPort = 23856
+localPort = 8080
 
 [services.development]
-run = "pnpm --filter @workspace/video-koleksi run dev"
+run = "PORT=8080 node artifacts/video-koleksi/server.mjs"
 
 [services.env]
-PORT = "23856"
+PORT = "8080"

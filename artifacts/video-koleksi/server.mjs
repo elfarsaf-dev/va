@@ -24,7 +24,8 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
   const body = Buffer.concat(chunks);
 
   const host = nodeReq.headers.host || `localhost:${PORT}`;
-  const url = `http://${host}${nodeReq.url}`;
+  const proto = nodeReq.headers["x-forwarded-proto"] || "http";
+  const url = `${proto}://${host}${nodeReq.url}`;
 
   const headers = new Headers();
   for (const [k, v] of Object.entries(nodeReq.headers)) {
