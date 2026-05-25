@@ -51,7 +51,7 @@ async function createVideo(data, supabaseKey) {
   return supabaseFetch(SUPABASE_TABLE, {
     method: "POST",
     body: JSON.stringify(data),
-    prefer: "return=representation",
+    prefer: "return=representation,resolution=ignore-duplicates",
   }, supabaseKey);
 }
 
@@ -981,19 +981,6 @@ async function fetchMp4Meta(url) {
   return result;
 }
 
-async function bulkCheckDuplicates(urls) {
-  try {
-    var res = await fetch('/api/bulk-check', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls: urls }),
-      signal: AbortSignal.timeout(10000)
-    });
-    var data = await res.json();
-    return new Set(data.existing || []);
-  } catch(e) { return new Set(); }
-}
-
 function fmtDurClient(sec) {
   if (!sec || sec <= 0) return '';
   var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
@@ -1006,42 +993,26 @@ async function bulkFetchTitles() {
   var total = bulkItems.length;
   var done = 0;
 
-  info.innerHTML = '⏳ Cek duplikat & ambil metadata... <b>0/' + total + '</b>';
+  info.innerHTML = '⏳ Ambil metadata... <b>0/' + total + '</b>';
 
-  // Step 1: duplicate check
-  var allUrls = bulkItems.map(function(x) { return x.cdnUrl; });
-  var dupSet = await bulkCheckDuplicates(allUrls);
-  var dupCount = 0;
-  for (var d = 0; d < bulkItems.length; d++) {
-    if (dupSet.has(bulkItems[d].cdnUrl)) {
-      bulkItems[d].duplicate = true;
-      bulkItems[d].selected = false;
-      dupCount++;
-    }
-  }
-  if (dupCount > 0) renderBulkList();
-
-  // Step 2: fetch metadata concurrently (skip duplicates)
   var idx = 0;
   async function fetchWorker() {
     while (idx < total) {
       var i = idx++;
       var item = bulkItems[i];
-      if (!item.duplicate) {
-        var meta = await fetchMp4Meta(item.cdnUrl);
-        if (meta.title) {
-          bulkItems[i].title = meta.title;
-          var inp = document.querySelector('#bulk-list input[type=text][data-idx="' + i + '"]');
-          if (inp) inp.value = meta.title;
-        }
-        if (meta.duration) {
-          bulkItems[i].duration = meta.duration;
-          var durEl = document.querySelector('#bulk-list .dur-badge[data-idx="' + i + '"]');
-          if (durEl) durEl.textContent = fmtDurClient(meta.duration);
-        }
+      var meta = await fetchMp4Meta(item.cdnUrl);
+      if (meta.title) {
+        bulkItems[i].title = meta.title;
+        var inp = document.querySelector('#bulk-list input[type=text][data-idx="' + i + '"]');
+        if (inp) inp.value = meta.title;
+      }
+      if (meta.duration) {
+        bulkItems[i].duration = meta.duration;
+        var durEl = document.querySelector('#bulk-list .dur-badge[data-idx="' + i + '"]');
+        if (durEl) durEl.textContent = fmtDurClient(meta.duration);
       }
       done++;
-      info.innerHTML = '⏳ Cek duplikat & ambil metadata... <b>' + done + '/' + total + '</b>';
+      info.innerHTML = '⏳ Ambil metadata... <b>' + done + '/' + total + '</b>';
     }
   }
 
@@ -1049,14 +1020,13 @@ async function bulkFetchTitles() {
   for (var w = 0; w < Math.min(5, total); w++) workers.push(fetchWorker());
   await Promise.all(workers);
 
-  var foundTitles = bulkItems.filter(function(x) { return !x.duplicate && x.title && !x.title.startsWith('Video '); }).length;
+  var foundTitles = bulkItems.filter(function(x) { return x.title && !x.title.startsWith('Video '); }).length;
   var foundDur = bulkItems.filter(function(x) { return x.duration > 0; }).length;
   var directCount = bulkItems.filter(function(x) { return x.direct; }).length;
   var convertCount = total - directCount;
   var msg = '✅ ' + total + ' link';
   if (directCount > 0) msg += ' · <span style="color:var(--success)">' + directCount + ' CDN</span>';
   if (convertCount > 0) msg += ' · <span style="color:var(--accent2)">' + convertCount + ' dikonversi</span>';
-  if (dupCount > 0) msg += ' · <span style="color:var(--danger)">' + dupCount + ' duplikat dilewati</span>';
   if (foundTitles > 0) msg += ' · <span style="color:var(--muted)">' + foundTitles + ' judul</span>';
   if (foundDur > 0) msg += ' · <span style="color:var(--muted)">' + foundDur + ' durasi</span>';
   info.innerHTML = msg;
@@ -1162,22 +1132,18 @@ function renderBulkList() {
   var html = '';
   for (var i = 0; i < bulkItems.length; i++) {
     var item = bulkItems[i];
-    var isDup = !!item.duplicate;
     var chk = item.selected ? ' checked' : '';
-    var rowStyle = isDup ? 'opacity:0.45;' : '';
-    var typeBadge = isDup
-      ? '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(249,112,102,0.15);color:var(--danger);font-weight:600;flex-shrink:0">Duplikat</span>'
-      : item.direct
-        ? '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(52,211,153,0.15);color:var(--success);font-weight:600;flex-shrink:0">CDN ✓</span>'
-        : '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(167,139,250,0.15);color:var(--accent2);font-weight:600;flex-shrink:0">ID→CDN</span>';
+    var typeBadge = item.direct
+      ? '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(52,211,153,0.15);color:var(--success);font-weight:600;flex-shrink:0">CDN ✓</span>'
+      : '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(167,139,250,0.15);color:var(--accent2);font-weight:600;flex-shrink:0">ID→CDN</span>';
     var durBadge = item.duration
       ? '<span class="dur-badge" data-idx="' + i + '" style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(0,0,0,0.35);color:#ccc;font-weight:600;flex-shrink:0">' + fmtDurClient(item.duration) + '</span>'
       : '<span class="dur-badge" data-idx="' + i + '" style="font-size:0.62rem;color:var(--muted);flex-shrink:0"></span>';
-    html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);' + rowStyle + '">';
-    html += '<input type="checkbox"' + chk + (isDup ? ' disabled' : '') + ' data-idx="' + i + '" onchange="bulkToggle(this)" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0">';
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">';
+    html += '<input type="checkbox"' + chk + ' data-idx="' + i + '" onchange="bulkToggle(this)" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0">';
     html += '<div style="flex:1;min-width:0">';
     html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">';
-    html += '<input type="text" value="' + escH(item.title) + '" data-idx="' + i + '" oninput="bulkTitle(this)"' + (isDup ? ' disabled' : '') + ' style="flex:1;padding:5px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;outline:none">';
+    html += '<input type="text" value="' + escH(item.title) + '" data-idx="' + i + '" oninput="bulkTitle(this)" style="flex:1;padding:5px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;outline:none">';
     html += durBadge + typeBadge;
     html += '</div>';
     html += '<div style="font-size:0.7rem;color:var(--muted);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(item.cdnUrl) + '</div>';
@@ -1302,21 +1268,6 @@ export default {
     const authedGlobal = await isAuthenticated(req, sessionSecret);
     if (!authedGlobal) {
       return Response.redirect(new URL("/login", req.url), 302);
-    }
-
-    // ── POST /api/bulk-check (no extra auth, already guarded above)
-    if (path === "/api/bulk-check" && method === "POST") {
-      try {
-        const body = await req.json();
-        const urls = Array.isArray(body.urls) ? body.urls.slice(0, 500) : [];
-        if (!urls.length) return new Response(JSON.stringify({ existing: [] }), { headers: { "Content-Type": "application/json" } });
-        const encoded = urls.map(u => encodeURIComponent(u)).join(",");
-        const rows = await supabaseFetch(`${SUPABASE_TABLE}?url=in.(${encoded})&select=url`, {}, supabaseKey);
-        const existing = (rows || []).map(r => r.url);
-        return new Response(JSON.stringify({ existing }), { headers: { "Content-Type": "application/json" } });
-      } catch (e) {
-        return new Response(JSON.stringify({ existing: [], error: e.message }), { headers: { "Content-Type": "application/json" } });
-      }
     }
 
     // ── GET /
