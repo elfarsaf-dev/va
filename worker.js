@@ -814,101 +814,77 @@ function editVideo(jsonStr) {
 
 // ── Bulk Import Logic ─────────────────────────────────────────────────────────
 
-function extractVideyId(rawUrl) {
-  const s = rawUrl.trim();
-  try {
-    const u = new URL(s);
-    // ?id= param (videy.co/v?id=xxx)
-    const id = u.searchParams.get('id');
-    if (id && id.length >= 4) return id;
-    // Last non-empty path segment (videvideoy.site/slug, short.gy/slug, etc.)
-    const segs = u.pathname.split('/').filter(Boolean);
-    if (segs.length > 0) {
-      const seg = segs[segs.length - 1];
-      // Skip generic paths like 'v', 'video', 'watch' that aren't IDs
-      if (seg.length >= 4 && !['video','watch','embed','player'].includes(seg.toLowerCase())) return seg;
-    }
-  } catch {}
-  return null;
-}
-
-function toCdnUrl(id) {
-  return 'https://cdn.videy.co/' + id + '.mp4';
-}
-
-function extractAllUrls(text) {
-  // Extract all URLs from the text (handles mixed text + links)
-  const regex = /https?:\/\/[^\s"'<>]+/g;
-  return [...new Set(text.match(regex) || [])];
-}
-
-let bulkItems = [];
+var bulkItems = [];
 
 function bulkScan() {
-  const text = document.getElementById('bulk-input').value;
-  const urls = extractAllUrls(text);
-  const info = document.getElementById('bulk-scan-info');
-
-  if (!urls.length) {
-    info.style.display = 'block';
-    info.innerHTML = '<span style="color:var(--danger)">Tidak ada URL yang ditemukan. Pastikan ada link http:// di input.</span>';
-    return;
-  }
-
-  bulkItems = [];
-  let skipped = 0;
-
-  for (const url of urls) {
-    const id = extractVideyId(url);
-    if (id) {
-      bulkItems.push({ originalUrl: url, id, cdnUrl: toCdnUrl(id), selected: true, title: 'Video ' + id });
-    } else {
-      skipped++;
+  var text = document.getElementById('bulk-input').value;
+  var info = document.getElementById('bulk-scan-info');
+  var seen = {};
+  var found = [];
+  // Extract any ?id=VALUE or &id=VALUE from anywhere in the text
+  var re = /[?&]id=([A-Za-z0-9_\-]+)/g;
+  var m;
+  while ((m = re.exec(text)) !== null) {
+    var id = m[1];
+    if (id.length >= 3 && !seen[id]) {
+      seen[id] = true;
+      found.push(id);
     }
   }
-
   info.style.display = 'block';
-  if (!bulkItems.length) {
-    info.innerHTML = '<span style="color:var(--danger)">Tidak ada ID yang berhasil diekstrak dari ' + urls.length + ' URL.</span>';
+  if (!found.length) {
+    info.innerHTML = 'Tidak ada ID yang ditemukan. Pastikan link mengandung <b>?id=</b> atau <b>&amp;id=</b>.';
     return;
   }
   info.innerHTML = '';
-
-  // Render step 2
-  document.getElementById('bulk-count').textContent = bulkItems.length + ' URL berhasil diekstrak' + (skipped ? ' (' + skipped + ' dilewati)' : '');
+  bulkItems = found.map(function(id) {
+    return { id: id, cdnUrl: 'https://cdn.videy.co/' + id + '.mp4', selected: true, title: 'Video ' + id };
+  });
+  document.getElementById('bulk-count').textContent = bulkItems.length + ' ID ditemukan';
   renderBulkList();
   document.getElementById('bulk-step1').style.display = 'none';
   document.getElementById('bulk-step2').style.display = 'block';
 }
 
+function escH(s) {
+  return String(s || '').split('&').join('&amp;').split('"').join('&quot;');
+}
+
 function renderBulkList() {
-  const container = document.getElementById('bulk-list');
-  container.innerHTML = bulkItems.map((item, i) => \`
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);last-child:border-bottom:none">
-      <input type="checkbox" \${item.selected ? 'checked' : ''} onchange="bulkItems[\${i}].selected=this.checked;updateBulkBtn()" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0">
-      <div style="flex:1;min-width:0">
-        <input type="text" value="\${escHtmlJs(item.title)}" oninput="bulkItems[\${i}].title=this.value"
-          style="width:100%;padding:5px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;margin-bottom:4px;outline:none">
-        <div style="font-size:0.72rem;color:var(--accent2);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${escHtmlJs(item.cdnUrl)}</div>
-        <div style="font-size:0.68rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">dari: \${escHtmlJs(item.originalUrl)}</div>
-      </div>
-    </div>
-  \`).join('');
+  var container = document.getElementById('bulk-list');
+  var html = '';
+  for (var i = 0; i < bulkItems.length; i++) {
+    var item = bulkItems[i];
+    var chk = item.selected ? ' checked' : '';
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">';
+    html += '<input type="checkbox"' + chk + ' data-idx="' + i + '" onchange="bulkToggle(this)" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0">';
+    html += '<div style="flex:1;min-width:0">';
+    html += '<input type="text" value="' + escH(item.title) + '" data-idx="' + i + '" oninput="bulkTitle(this)" style="width:100%;padding:5px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;margin-bottom:4px;outline:none">';
+    html += '<div style="font-size:0.72rem;color:var(--accent2);font-family:monospace">' + escH(item.cdnUrl) + '</div>';
+    html += '</div></div>';
+  }
+  container.innerHTML = html;
   updateBulkBtn();
 }
 
-function escHtmlJs(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function bulkToggle(el) {
+  bulkItems[+el.dataset.idx].selected = el.checked;
+  updateBulkBtn();
+}
+
+function bulkTitle(el) {
+  bulkItems[+el.dataset.idx].title = el.value;
 }
 
 function updateBulkBtn() {
-  const n = bulkItems.filter(i=>i.selected).length;
-  document.getElementById('bulk-submit-btn').textContent = '💾 Simpan ' + n + ' Video';
-  document.getElementById('bulk-submit-btn').disabled = n === 0;
+  var n = 0;
+  for (var i = 0; i < bulkItems.length; i++) { if (bulkItems[i].selected) n++; }
+  document.getElementById('bulk-submit-btn').textContent = 'Simpan ' + n + ' Video';
+  document.getElementById('bulk-submit-btn').disabled = (n === 0);
 }
 
 function bulkSelectAll(val) {
-  bulkItems.forEach(i => i.selected = val);
+  for (var i = 0; i < bulkItems.length; i++) { bulkItems[i].selected = val; }
   renderBulkList();
 }
 
@@ -918,37 +894,30 @@ function bulkBack() {
 }
 
 async function bulkSubmit() {
-  const category = document.getElementById('bulk-category').value.trim();
-  const selected = bulkItems.filter(i => i.selected);
+  var category = document.getElementById('bulk-category').value.trim();
+  var selected = bulkItems.filter(function(x) { return x.selected; });
   if (!selected.length) return;
-
-  const btn = document.getElementById('bulk-submit-btn');
+  var btn = document.getElementById('bulk-submit-btn');
   btn.disabled = true;
   document.getElementById('bulk-progress').style.display = 'block';
-
-  let done = 0;
-  let failed = 0;
-
-  for (const item of selected) {
+  var done = 0, failed = 0;
+  for (var j = 0; j < selected.length; j++) {
+    var item = selected[j];
     try {
-      const fd = new FormData();
+      var fd = new FormData();
       fd.append('title', item.title || ('Video ' + item.id));
       fd.append('url', item.cdnUrl);
       fd.append('category', category);
       fd.append('description', '');
-      const res = await fetch('/admin/add', { method: 'POST', body: fd });
-      // /admin/add redirects on success (303) — fetch follows it
+      await fetch('/admin/add', { method: 'POST', body: fd });
       done++;
-    } catch(e) {
-      failed++;
-    }
-    const pct = Math.round(((done + failed) / selected.length) * 100);
+    } catch(e) { failed++; }
+    var pct = Math.round(((done + failed) / selected.length) * 100);
     document.getElementById('bulk-progress-bar').style.width = pct + '%';
     document.getElementById('bulk-progress-text').textContent = done + '/' + selected.length + ' disimpan' + (failed ? ', ' + failed + ' gagal' : '');
   }
-
-  document.getElementById('bulk-progress-text').textContent = '✅ Selesai! ' + done + ' video ditambahkan' + (failed ? ', ' + failed + ' gagal' : '') + '. Memuat ulang...';
-  setTimeout(() => { window.location.href = '/admin?msg=Berhasil+menambahkan+' + done + '+video'; }, 1200);
+  document.getElementById('bulk-progress-text').textContent = 'Selesai! ' + done + ' video ditambahkan. Memuat ulang...';
+  setTimeout(function() { window.location.href = '/admin?msg=Berhasil+menambahkan+' + done + '+video'; }, 1200);
 }
 </script>`;
 
