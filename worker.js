@@ -136,8 +136,6 @@ function getThumbnail(url) {
   if (yt) return `https://img.youtube.com/vi/${yt[1]}/hqdefault.jpg`;
   const vim = url.match(/vimeo\.com\/(\d+)/);
   if (vim) return `https://vumbnail.com/${vim[1]}.jpg`;
-  // CDN .mp4 → try same URL with .jpg (works for cdn.videy.co and similar CDNs)
-  if (/\.mp4(\?.*)?$/i.test(url)) return url.replace(/\.mp4(\?.*)?$/i, '.jpg');
   return null;
 }
 
@@ -322,7 +320,12 @@ nav {
   position: relative; aspect-ratio: 16/9; background: #000; margin: 16px 24px 20px;
   border-radius: 10px; overflow: hidden;
 }
-.embed-wrap iframe { width: 100%; height: 100%; border: none; }
+.embed-wrap iframe, .embed-wrap video { width: 100%; height: 100%; border: none; display: block; }
+.thumb-vid { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb-play-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.18); pointer-events: none;
+}
 .modal-body { padding: 0 24px 24px; }
 .modal-category { font-size: 0.75rem; color: var(--accent2); font-weight: 600; text-transform: uppercase; margin-bottom: 8px; }
 .modal-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 10px; }
@@ -495,14 +498,25 @@ function timeAgo(dateStr) {
 function renderVideoCard(v) {
   const thumb = getThumbnail(v.url);
   const embed = toEmbedUrl(v.url);
+  const isMp4 = /\.mp4(\?.*)?$/i.test(v.url);
+  const playIcon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+
+  const thumbHtml = isMp4
+    ? `<video class="thumb-vid" src="${escHtml(v.url)}" muted playsinline preload="metadata" onloadedmetadata="this.currentTime=0.001"></video>
+       <div class="thumb-play-overlay"><div class="play-icon">${playIcon}</div></div>`
+    : thumb
+      ? `<img src="${escHtml(thumb)}" alt="${escHtml(v.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="thumb-placeholder" style="display:none"><div class="play-icon">${playIcon}</div></div>`
+      : `<div class="thumb-placeholder"><div class="play-icon">${playIcon}</div></div>`;
+
+  const playerHtml = isMp4
+    ? `<video src="${escHtml(v.url)}" controls autoplay playsinline style="width:100%;height:100%;object-fit:contain;background:#000"></video>`
+    : `<iframe src="${escHtml(embed || v.url)}" allowfullscreen allow="autoplay; encrypted-media" loading="lazy"></iframe>`;
+
   return `
 <div class="video-card" onclick="openVideo('${escHtml(v.id)}')">
   <div class="video-thumb">
-    ${thumb
-      ? `<img src="${escHtml(thumb)}" alt="${escHtml(v.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">\
-<div class="thumb-placeholder" style="display:none"><div class="play-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>`
-      : `<div class="thumb-placeholder"><div class="play-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>`
-    }
+    ${thumbHtml}
   </div>
   <div class="video-info">
     ${v.category ? `<div class="video-category">${escHtml(v.category)}</div>` : ""}
@@ -519,7 +533,7 @@ function renderVideoCard(v) {
       <button class="modal-close" onclick="closeModal('${escHtml(v.id)}')">&times;</button>
     </div>
     <div class="embed-wrap">
-      <iframe src="${escHtml(embed || v.url)}" allowfullscreen allow="autoplay; encrypted-media" loading="lazy"></iframe>
+      ${playerHtml}
     </div>
     <div class="modal-body">
       ${v.category ? `<div class="modal-category">${escHtml(v.category)}</div>` : ""}
