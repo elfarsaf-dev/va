@@ -648,7 +648,10 @@ async function renderAdmin(req, env, flash = "") {
 <div class="container">
   <div class="admin-header">
     <h1>Panel Admin</h1>
-    <button class="btn btn-primary" onclick="document.getElementById('add-modal').style.display='flex'">+ Tambah Video</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="document.getElementById('bulk-modal').style.display='flex'" style="border-color:var(--accent);color:var(--accent)">⚡ Bulk Import Videy</button>
+      <button class="btn btn-primary" onclick="document.getElementById('add-modal').style.display='flex'">+ Tambah Video</button>
+    </div>
   </div>
   ${flash ? `<div class="alert ${flash.startsWith("Berhasil") ? "alert-success" : "alert-error"}" style="margin-top:20px">${escHtml(flash)}</div>` : ""}
   <div class="stats">
@@ -741,6 +744,63 @@ async function renderAdmin(req, env, flash = "") {
   </div>
 </div>
 
+<!-- Bulk Import Modal -->
+<div class="modal-overlay" id="bulk-modal" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal" style="max-width:680px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal-header" style="padding:24px 24px 0;flex-shrink:0">
+      <div>
+        <h2 style="font-size:1.2rem;font-weight:700">⚡ Bulk Import Videy</h2>
+        <p style="color:var(--muted);font-size:0.8rem;margin-top:4px">Paste banyak link sekaligus — otomatis extract ID &amp; convert ke CDN</p>
+      </div>
+      <button class="modal-close" onclick="document.getElementById('bulk-modal').style.display='none'">&times;</button>
+    </div>
+    <div style="padding:20px 24px;overflow-y:auto;flex:1">
+
+      <!-- Step 1: Paste links -->
+      <div id="bulk-step1">
+        <div class="form-group">
+          <label>Paste link-link videy di sini (satu per baris atau campur dengan teks lain)</label>
+          <textarea id="bulk-input" rows="8" placeholder="https://videy.co/v?id=hQF0u32U1&#10;https://videvideoy.site/u3lun&#10;https://videyvideo.short.gy/blH8n1&#10;..." style="width:100%;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical"></textarea>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div class="form-group" style="margin:0;flex:1;min-width:160px">
+            <input type="text" id="bulk-category" list="cat-list-bulk" placeholder="Kategori (opsional)" style="width:100%;padding:9px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.875rem;outline:none">
+            <datalist id="cat-list-bulk">${catOptions}</datalist>
+          </div>
+          <button class="btn btn-primary" onclick="bulkScan()" style="flex-shrink:0">🔍 Scan Link</button>
+        </div>
+        <div id="bulk-scan-info" style="display:none;margin-top:10px;font-size:0.8rem;color:var(--muted)"></div>
+      </div>
+
+      <!-- Step 2: Preview results -->
+      <div id="bulk-step2" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div style="font-size:0.875rem">
+            <span id="bulk-count" style="font-weight:700;color:var(--accent2)"></span>
+            <button onclick="bulkBack()" style="margin-left:12px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.8rem;text-decoration:underline">← Edit ulang</button>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" onclick="bulkSelectAll(true)">Pilih Semua</button>
+            <button class="btn btn-ghost btn-sm" onclick="bulkSelectAll(false)">Batal Semua</button>
+          </div>
+        </div>
+        <div id="bulk-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"></div>
+        <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn btn-ghost" onclick="bulkBack()">Batal</button>
+          <button class="btn btn-primary" id="bulk-submit-btn" onclick="bulkSubmit()">💾 Simpan yang Dipilih</button>
+        </div>
+        <div id="bulk-progress" style="display:none;margin-top:12px">
+          <div style="background:var(--bg2);border-radius:6px;overflow:hidden;height:8px">
+            <div id="bulk-progress-bar" style="height:100%;background:var(--accent);transition:width 0.3s;width:0%"></div>
+          </div>
+          <div id="bulk-progress-text" style="font-size:0.8rem;color:var(--muted);margin-top:6px;text-align:center"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <script>
 function editVideo(jsonStr) {
   const v = JSON.parse(jsonStr);
@@ -750,6 +810,145 @@ function editVideo(jsonStr) {
   document.getElementById('edit-category').value = v.category || '';
   document.getElementById('edit-description').value = v.description || '';
   document.getElementById('edit-modal').style.display = 'flex';
+}
+
+// ── Bulk Import Logic ─────────────────────────────────────────────────────────
+
+function extractVideyId(rawUrl) {
+  const s = rawUrl.trim();
+  try {
+    const u = new URL(s);
+    // ?id= param (videy.co/v?id=xxx)
+    const id = u.searchParams.get('id');
+    if (id && id.length >= 4) return id;
+    // Last non-empty path segment (videvideoy.site/slug, short.gy/slug, etc.)
+    const segs = u.pathname.split('/').filter(Boolean);
+    if (segs.length > 0) {
+      const seg = segs[segs.length - 1];
+      // Skip generic paths like 'v', 'video', 'watch' that aren't IDs
+      if (seg.length >= 4 && !['video','watch','embed','player'].includes(seg.toLowerCase())) return seg;
+    }
+  } catch {}
+  return null;
+}
+
+function toCdnUrl(id) {
+  return 'https://cdn.videy.co/' + id + '.mp4';
+}
+
+function extractAllUrls(text) {
+  // Extract all URLs from the text (handles mixed text + links)
+  const regex = /https?:\/\/[^\s"'<>]+/g;
+  return [...new Set(text.match(regex) || [])];
+}
+
+let bulkItems = [];
+
+function bulkScan() {
+  const text = document.getElementById('bulk-input').value;
+  const urls = extractAllUrls(text);
+  const info = document.getElementById('bulk-scan-info');
+
+  if (!urls.length) {
+    info.style.display = 'block';
+    info.innerHTML = '<span style="color:var(--danger)">Tidak ada URL yang ditemukan. Pastikan ada link http:// di input.</span>';
+    return;
+  }
+
+  bulkItems = [];
+  let skipped = 0;
+
+  for (const url of urls) {
+    const id = extractVideyId(url);
+    if (id) {
+      bulkItems.push({ originalUrl: url, id, cdnUrl: toCdnUrl(id), selected: true, title: 'Video ' + id });
+    } else {
+      skipped++;
+    }
+  }
+
+  info.style.display = 'block';
+  if (!bulkItems.length) {
+    info.innerHTML = '<span style="color:var(--danger)">Tidak ada ID yang berhasil diekstrak dari ' + urls.length + ' URL.</span>';
+    return;
+  }
+  info.innerHTML = '';
+
+  // Render step 2
+  document.getElementById('bulk-count').textContent = bulkItems.length + ' URL berhasil diekstrak' + (skipped ? ' (' + skipped + ' dilewati)' : '');
+  renderBulkList();
+  document.getElementById('bulk-step1').style.display = 'none';
+  document.getElementById('bulk-step2').style.display = 'block';
+}
+
+function renderBulkList() {
+  const container = document.getElementById('bulk-list');
+  container.innerHTML = bulkItems.map((item, i) => \`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);last-child:border-bottom:none">
+      <input type="checkbox" \${item.selected ? 'checked' : ''} onchange="bulkItems[\${i}].selected=this.checked;updateBulkBtn()" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <input type="text" value="\${escHtmlJs(item.title)}" oninput="bulkItems[\${i}].title=this.value"
+          style="width:100%;padding:5px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;margin-bottom:4px;outline:none">
+        <div style="font-size:0.72rem;color:var(--accent2);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${escHtmlJs(item.cdnUrl)}</div>
+        <div style="font-size:0.68rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">dari: \${escHtmlJs(item.originalUrl)}</div>
+      </div>
+    </div>
+  \`).join('');
+  updateBulkBtn();
+}
+
+function escHtmlJs(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function updateBulkBtn() {
+  const n = bulkItems.filter(i=>i.selected).length;
+  document.getElementById('bulk-submit-btn').textContent = '💾 Simpan ' + n + ' Video';
+  document.getElementById('bulk-submit-btn').disabled = n === 0;
+}
+
+function bulkSelectAll(val) {
+  bulkItems.forEach(i => i.selected = val);
+  renderBulkList();
+}
+
+function bulkBack() {
+  document.getElementById('bulk-step1').style.display = 'block';
+  document.getElementById('bulk-step2').style.display = 'none';
+}
+
+async function bulkSubmit() {
+  const category = document.getElementById('bulk-category').value.trim();
+  const selected = bulkItems.filter(i => i.selected);
+  if (!selected.length) return;
+
+  const btn = document.getElementById('bulk-submit-btn');
+  btn.disabled = true;
+  document.getElementById('bulk-progress').style.display = 'block';
+
+  let done = 0;
+  let failed = 0;
+
+  for (const item of selected) {
+    try {
+      const fd = new FormData();
+      fd.append('title', item.title || ('Video ' + item.id));
+      fd.append('url', item.cdnUrl);
+      fd.append('category', category);
+      fd.append('description', '');
+      const res = await fetch('/admin/add', { method: 'POST', body: fd });
+      // /admin/add redirects on success (303) — fetch follows it
+      done++;
+    } catch(e) {
+      failed++;
+    }
+    const pct = Math.round(((done + failed) / selected.length) * 100);
+    document.getElementById('bulk-progress-bar').style.width = pct + '%';
+    document.getElementById('bulk-progress-text').textContent = done + '/' + selected.length + ' disimpan' + (failed ? ', ' + failed + ' gagal' : '');
+  }
+
+  document.getElementById('bulk-progress-text').textContent = '✅ Selesai! ' + done + ' video ditambahkan' + (failed ? ', ' + failed + ' gagal' : '') + '. Memuat ulang...';
+  setTimeout(() => { window.location.href = '/admin?msg=Berhasil+menambahkan+' + done + '+video'; }, 1200);
 }
 </script>`;
 
