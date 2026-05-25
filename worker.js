@@ -434,6 +434,15 @@ nav {
 .stat-card .stat-num { font-size: 1.6rem; font-weight: 700; color: var(--accent2); }
 .stat-card .stat-label { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
 
+/* DURATION BADGE */
+.duration-badge {
+  position: absolute; bottom: 5px; right: 5px;
+  background: rgba(0,0,0,0.78); color: #fff;
+  font-size: 0.65rem; font-weight: 600; letter-spacing: 0.02em;
+  padding: 2px 5px; border-radius: 4px; pointer-events: none;
+  line-height: 1.4;
+}
+
 /* PAGINATION */
 .pagination { display: flex; gap: 6px; justify-content: center; padding: 20px 0 40px; flex-wrap: wrap; }
 .page-btn {
@@ -517,6 +526,15 @@ function escHtml(s) {
   return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+function fmtDuration(sec) {
+  if (!sec || sec <= 0) return "";
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  return `${m}:${String(s).padStart(2,"0")}`;
+}
+
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -548,10 +566,13 @@ function renderVideoCard(v) {
     ? `<video src="${escHtml(v.url)}" controls autoplay playsinline style="width:100%;height:100%;object-fit:contain;background:#000"></video>`
     : `<iframe src="${escHtml(embed || v.url)}" allowfullscreen allow="autoplay; encrypted-media" loading="lazy"></iframe>`;
 
+  const durBadge = v.duration ? `<div class="duration-badge">${fmtDuration(v.duration)}</div>` : "";
+
   return `
 <div class="video-card" onclick="openVideo('${escHtml(v.id)}')">
   <div class="video-thumb">
     ${thumbHtml}
+    ${durBadge}
   </div>
   <div class="video-info">
     ${v.category ? `<div class="video-category">${escHtml(v.category)}</div>` : ""}
@@ -868,54 +889,93 @@ function editVideo(jsonStr) {
 
 var bulkItems = [];
 
-// Try to extract title from MP4 metadata (©nam atom), Content-Disposition, or URL filename
-async function fetchMp4Title(url) {
+// Read big-endian uint32 from Uint8Array
+function readU32(b, o) { return ((b[o]<<24)|(b[o+1]<<16)|(b[o+2]<<8)|b[o+3])>>>0; }
+
+// Fetch MP4 metadata: title (©nam) + duration (mvhd) + Content-Disposition
+async function fetchMp4Meta(url) {
+  var result = { title: null, duration: null };
   try {
-    // Fetch first 64KB to parse MP4 atoms
     var res = await fetch(url, {
-      headers: { 'Range': 'bytes=0-65535' },
-      signal: AbortSignal.timeout(6000)
+      headers: { 'Range': 'bytes=0-131071' }, // 128KB
+      signal: AbortSignal.timeout(7000)
     });
     if (!res.ok && res.status !== 206) throw new Error('bad status');
 
-    // Check Content-Disposition first
+    // Content-Disposition filename
     var cd = res.headers.get('content-disposition') || '';
     var cdMatch = cd.match(/filename\*?=(?:UTF-8''|")?([^";\n]+)/i);
     if (cdMatch) {
-      var cdName = decodeURIComponent(cdMatch[1].trim().replace(/^"|"$/g, '').replace(/\.mp4$/i, ''));
-      if (cdName && cdName.length > 2) return cdName;
+      var cdName = decodeURIComponent(cdMatch[1].trim().replace(/^"|"$/g,'').replace(/\.mp4$/i,''));
+      if (cdName && cdName.length > 2) result.title = cdName;
     }
 
     var buf = await res.arrayBuffer();
-    var bytes = new Uint8Array(buf);
+    var b = new Uint8Array(buf);
     var dec = new TextDecoder('utf-8', { fatal: false });
 
-    // Search for ©nam atom (0xA9 0x6E 0x61 0x6D)
-    for (var i = 0; i < bytes.length - 28; i++) {
-      if (bytes[i] === 0xA9 && bytes[i+1] === 0x6E && bytes[i+2] === 0x61 && bytes[i+3] === 0x6D) {
-        // ©nam found at i. Inside: [data sub-box]
-        // data sub-box: [size(4)][data(4)][version_flags(4)][locale(4)][text]
-        var dataBoxSize = ((bytes[i+4] << 24) | (bytes[i+5] << 16) | (bytes[i+6] << 8) | bytes[i+7]) >>> 0;
-        var textStart = i + 4 + 16; // skip data box header(8) + version_flags(4) + locale(4)
-        var textLen = dataBoxSize - 16;
-        if (textLen > 0 && textLen < 512 && textStart + textLen <= bytes.length) {
-          var title = dec.decode(bytes.slice(textStart, textStart + textLen)).trim();
-          if (title && title.length > 0) return title;
+    for (var i = 0; i < b.length - 28; i++) {
+      // ©nam atom → title
+      if (!result.title && b[i]===0xA9 && b[i+1]===0x6E && b[i+2]===0x61 && b[i+3]===0x6D) {
+        var dBoxSize = readU32(b, i+4);
+        var tStart = i + 4 + 16; // skip data-box(8) + version_flags(4) + locale(4)
+        var tLen = dBoxSize - 16;
+        if (tLen > 0 && tLen < 512 && tStart + tLen <= b.length) {
+          var t = dec.decode(b.slice(tStart, tStart + tLen)).trim();
+          if (t) result.title = t;
         }
       }
+      // mvhd atom → duration
+      if (!result.duration && b[i]===0x6D && b[i+1]===0x76 && b[i+2]===0x68 && b[i+3]===0x64) {
+        var ver = b[i+4];
+        var timescale, durationTicks;
+        if (ver === 0 && i + 24 <= b.length) {
+          // v0: version(1)+flags(3)+creation(4)+modification(4)+timescale(4)+duration(4)
+          timescale = readU32(b, i + 16);
+          durationTicks = readU32(b, i + 20);
+        } else if (ver === 1 && i + 36 <= b.length) {
+          // v1: version(1)+flags(3)+creation(8)+modification(8)+timescale(4)+duration(8)
+          timescale = readU32(b, i + 24);
+          durationTicks = readU32(b, i + 32); // use upper 4 bytes (lower 4 sufficient for < 50h)
+        }
+        if (timescale > 0 && durationTicks > 0) {
+          result.duration = Math.round(durationTicks / timescale);
+        }
+      }
+      if (result.title && result.duration) break;
     }
   } catch(e) {}
 
-  // Fallback: extract and clean filename from URL
+  // Fallback title: clean filename from URL
+  if (!result.title) {
+    try {
+      var parts = new URL(url).pathname.split('/');
+      var fname = parts[parts.length-1].replace(/\.mp4$/i,'').replace(/[_\-\.]+/g,' ').trim();
+      if (fname && fname.length > 2) result.title = fname.charAt(0).toUpperCase() + fname.slice(1);
+    } catch(e) {}
+  }
+
+  return result;
+}
+
+async function bulkCheckDuplicates(urls) {
   try {
-    var parts = new URL(url).pathname.split('/');
-    var fname = parts[parts.length - 1].replace(/\.mp4$/i, '').replace(/[_\-\.]+/g, ' ').trim();
-    if (fname && fname.length > 2) {
-      return fname.charAt(0).toUpperCase() + fname.slice(1);
-    }
-  } catch(e) {}
+    var res = await fetch('/api/bulk-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls: urls }),
+      signal: AbortSignal.timeout(10000)
+    });
+    var data = await res.json();
+    return new Set(data.existing || []);
+  } catch(e) { return new Set(); }
+}
 
-  return null;
+function fmtDurClient(sec) {
+  if (!sec || sec <= 0) return '';
+  var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+  if (h > 0) return h + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  return m + ':' + String(s).padStart(2,'0');
 }
 
 async function bulkFetchTitles() {
@@ -923,38 +983,61 @@ async function bulkFetchTitles() {
   var total = bulkItems.length;
   var done = 0;
 
-  info.innerHTML = '⏳ Mengambil judul dari metadata... <b>0/' + total + '</b>';
+  info.innerHTML = '⏳ Cek duplikat & ambil metadata... <b>0/' + total + '</b>';
 
-  // Fetch all in parallel with concurrency limit of 5
+  // Step 1: duplicate check
+  var allUrls = bulkItems.map(function(x) { return x.cdnUrl; });
+  var dupSet = await bulkCheckDuplicates(allUrls);
+  var dupCount = 0;
+  for (var d = 0; d < bulkItems.length; d++) {
+    if (dupSet.has(bulkItems[d].cdnUrl)) {
+      bulkItems[d].duplicate = true;
+      bulkItems[d].selected = false;
+      dupCount++;
+    }
+  }
+  if (dupCount > 0) renderBulkList();
+
+  // Step 2: fetch metadata concurrently (skip duplicates)
   var idx = 0;
-  async function worker() {
+  async function fetchWorker() {
     while (idx < total) {
       var i = idx++;
       var item = bulkItems[i];
-      var title = await fetchMp4Title(item.cdnUrl);
-      if (title) {
-        bulkItems[i].title = title;
-        // Update input in DOM if rendered
-        var inputs = document.querySelectorAll('#bulk-list input[type=text][data-idx="' + i + '"]');
-        if (inputs.length) inputs[0].value = title;
+      if (!item.duplicate) {
+        var meta = await fetchMp4Meta(item.cdnUrl);
+        if (meta.title) {
+          bulkItems[i].title = meta.title;
+          var inp = document.querySelector('#bulk-list input[type=text][data-idx="' + i + '"]');
+          if (inp) inp.value = meta.title;
+        }
+        if (meta.duration) {
+          bulkItems[i].duration = meta.duration;
+          var durEl = document.querySelector('#bulk-list .dur-badge[data-idx="' + i + '"]');
+          if (durEl) durEl.textContent = fmtDurClient(meta.duration);
+        }
       }
       done++;
-      info.innerHTML = '⏳ Mengambil judul dari metadata... <b>' + done + '/' + total + '</b>';
+      info.innerHTML = '⏳ Cek duplikat & ambil metadata... <b>' + done + '/' + total + '</b>';
     }
   }
 
   var workers = [];
-  for (var w = 0; w < Math.min(5, total); w++) workers.push(worker());
+  for (var w = 0; w < Math.min(5, total); w++) workers.push(fetchWorker());
   await Promise.all(workers);
 
-  var found = bulkItems.filter(function(x) { return x.title && !x.title.startsWith('Video '); }).length;
+  var foundTitles = bulkItems.filter(function(x) { return !x.duplicate && x.title && !x.title.startsWith('Video '); }).length;
+  var foundDur = bulkItems.filter(function(x) { return x.duration > 0; }).length;
   var directCount = bulkItems.filter(function(x) { return x.direct; }).length;
   var convertCount = total - directCount;
-  var msg = '✅ ' + total + ' link ditemukan';
-  if (directCount > 0) msg += ' · <span style="color:var(--success)">' + directCount + ' CDN langsung</span>';
+  var msg = '✅ ' + total + ' link';
+  if (directCount > 0) msg += ' · <span style="color:var(--success)">' + directCount + ' CDN</span>';
   if (convertCount > 0) msg += ' · <span style="color:var(--accent2)">' + convertCount + ' dikonversi</span>';
-  if (found > 0) msg += ' · <span style="color:var(--muted)">' + found + ' judul berhasil diambil</span>';
+  if (dupCount > 0) msg += ' · <span style="color:var(--danger)">' + dupCount + ' duplikat dilewati</span>';
+  if (foundTitles > 0) msg += ' · <span style="color:var(--muted)">' + foundTitles + ' judul</span>';
+  if (foundDur > 0) msg += ' · <span style="color:var(--muted)">' + foundDur + ' durasi</span>';
   info.innerHTML = msg;
+  updateBulkBtn();
 }
 
 function bulkScan() {
@@ -1036,16 +1119,23 @@ function renderBulkList() {
   var html = '';
   for (var i = 0; i < bulkItems.length; i++) {
     var item = bulkItems[i];
+    var isDup = !!item.duplicate;
     var chk = item.selected ? ' checked' : '';
-    var badge = item.direct
-      ? '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(52,211,153,0.15);color:var(--success);font-weight:600;flex-shrink:0">CDN ✓</span>'
-      : '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(167,139,250,0.15);color:var(--accent2);font-weight:600;flex-shrink:0">ID→CDN</span>';
-    html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">';
-    html += '<input type="checkbox"' + chk + ' data-idx="' + i + '" onchange="bulkToggle(this)" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0">';
+    var rowStyle = isDup ? 'opacity:0.45;' : '';
+    var typeBadge = isDup
+      ? '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(249,112,102,0.15);color:var(--danger);font-weight:600;flex-shrink:0">Duplikat</span>'
+      : item.direct
+        ? '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(52,211,153,0.15);color:var(--success);font-weight:600;flex-shrink:0">CDN ✓</span>'
+        : '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(167,139,250,0.15);color:var(--accent2);font-weight:600;flex-shrink:0">ID→CDN</span>';
+    var durBadge = item.duration
+      ? '<span class="dur-badge" data-idx="' + i + '" style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(0,0,0,0.35);color:#ccc;font-weight:600;flex-shrink:0">' + fmtDurClient(item.duration) + '</span>'
+      : '<span class="dur-badge" data-idx="' + i + '" style="font-size:0.62rem;color:var(--muted);flex-shrink:0"></span>';
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);' + rowStyle + '">';
+    html += '<input type="checkbox"' + chk + (isDup ? ' disabled' : '') + ' data-idx="' + i + '" onchange="bulkToggle(this)" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0">';
     html += '<div style="flex:1;min-width:0">';
     html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">';
-    html += '<input type="text" value="' + escH(item.title) + '" data-idx="' + i + '" oninput="bulkTitle(this)" style="flex:1;padding:5px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;outline:none">';
-    html += badge;
+    html += '<input type="text" value="' + escH(item.title) + '" data-idx="' + i + '" oninput="bulkTitle(this)"' + (isDup ? ' disabled' : '') + ' style="flex:1;padding:5px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;outline:none">';
+    html += durBadge + typeBadge;
     html += '</div>';
     html += '<div style="font-size:0.7rem;color:var(--muted);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(item.cdnUrl) + '</div>';
     html += '</div></div>';
@@ -1096,6 +1186,7 @@ async function bulkSubmit() {
       fd.append('url', item.cdnUrl);
       fd.append('category', category);
       fd.append('description', '');
+      if (item.duration) fd.append('duration', String(item.duration));
       await fetch('/admin/add', { method: 'POST', body: fd });
       done++;
     } catch(e) { failed++; }
@@ -1170,6 +1261,21 @@ export default {
       return Response.redirect(new URL("/login", req.url), 302);
     }
 
+    // ── POST /api/bulk-check (no extra auth, already guarded above)
+    if (path === "/api/bulk-check" && method === "POST") {
+      try {
+        const body = await req.json();
+        const urls = Array.isArray(body.urls) ? body.urls.slice(0, 500) : [];
+        if (!urls.length) return new Response(JSON.stringify({ existing: [] }), { headers: { "Content-Type": "application/json" } });
+        const encoded = urls.map(u => encodeURIComponent(u)).join(",");
+        const rows = await supabaseFetch(`${SUPABASE_TABLE}?url=in.(${encoded})&select=url`, {}, supabaseKey);
+        const existing = (rows || []).map(r => r.url);
+        return new Response(JSON.stringify({ existing }), { headers: { "Content-Type": "application/json" } });
+      } catch (e) {
+        return new Response(JSON.stringify({ existing: [], error: e.message }), { headers: { "Content-Type": "application/json" } });
+      }
+    }
+
     // ── GET /
     if (path === "/" && method === "GET") {
       return renderHome(req, env);
@@ -1194,8 +1300,10 @@ export default {
           const videoUrl = (form.get("url") || "").trim();
           const category = (form.get("category") || "").trim();
           const description = (form.get("description") || "").trim();
+          const durationRaw = form.get("duration") || "";
+          const duration = durationRaw ? parseInt(durationRaw, 10) || null : null;
           if (!title || !videoUrl) throw new Error("Judul dan link wajib diisi.");
-          await createVideo({ title, url: videoUrl, category: category || null, description: description || null }, supabaseKey);
+          await createVideo({ title, url: videoUrl, category: category || null, description: description || null, ...(duration ? { duration } : {}) }, supabaseKey);
           return Response.redirect(new URL("/admin?msg=Berhasil+menambahkan+video", req.url), 303);
         } catch (e) {
           return renderAdmin(req, env, "Gagal menambahkan: " + e.message);
