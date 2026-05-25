@@ -868,6 +868,95 @@ function editVideo(jsonStr) {
 
 var bulkItems = [];
 
+// Try to extract title from MP4 metadata (©nam atom), Content-Disposition, or URL filename
+async function fetchMp4Title(url) {
+  try {
+    // Fetch first 64KB to parse MP4 atoms
+    var res = await fetch(url, {
+      headers: { 'Range': 'bytes=0-65535' },
+      signal: AbortSignal.timeout(6000)
+    });
+    if (!res.ok && res.status !== 206) throw new Error('bad status');
+
+    // Check Content-Disposition first
+    var cd = res.headers.get('content-disposition') || '';
+    var cdMatch = cd.match(/filename\*?=(?:UTF-8''|")?([^";\n]+)/i);
+    if (cdMatch) {
+      var cdName = decodeURIComponent(cdMatch[1].trim().replace(/^"|"$/g, '').replace(/\.mp4$/i, ''));
+      if (cdName && cdName.length > 2) return cdName;
+    }
+
+    var buf = await res.arrayBuffer();
+    var bytes = new Uint8Array(buf);
+    var dec = new TextDecoder('utf-8', { fatal: false });
+
+    // Search for ©nam atom (0xA9 0x6E 0x61 0x6D)
+    for (var i = 0; i < bytes.length - 28; i++) {
+      if (bytes[i] === 0xA9 && bytes[i+1] === 0x6E && bytes[i+2] === 0x61 && bytes[i+3] === 0x6D) {
+        // ©nam found at i. Inside: [data sub-box]
+        // data sub-box: [size(4)][data(4)][version_flags(4)][locale(4)][text]
+        var dataBoxSize = ((bytes[i+4] << 24) | (bytes[i+5] << 16) | (bytes[i+6] << 8) | bytes[i+7]) >>> 0;
+        var textStart = i + 4 + 16; // skip data box header(8) + version_flags(4) + locale(4)
+        var textLen = dataBoxSize - 16;
+        if (textLen > 0 && textLen < 512 && textStart + textLen <= bytes.length) {
+          var title = dec.decode(bytes.slice(textStart, textStart + textLen)).trim();
+          if (title && title.length > 0) return title;
+        }
+      }
+    }
+  } catch(e) {}
+
+  // Fallback: extract and clean filename from URL
+  try {
+    var parts = new URL(url).pathname.split('/');
+    var fname = parts[parts.length - 1].replace(/\.mp4$/i, '').replace(/[_\-\.]+/g, ' ').trim();
+    if (fname && fname.length > 2) {
+      return fname.charAt(0).toUpperCase() + fname.slice(1);
+    }
+  } catch(e) {}
+
+  return null;
+}
+
+async function bulkFetchTitles() {
+  var info = document.getElementById('bulk-scan-info');
+  var total = bulkItems.length;
+  var done = 0;
+
+  info.innerHTML = '⏳ Mengambil judul dari metadata... <b>0/' + total + '</b>';
+
+  // Fetch all in parallel with concurrency limit of 5
+  var idx = 0;
+  async function worker() {
+    while (idx < total) {
+      var i = idx++;
+      var item = bulkItems[i];
+      var title = await fetchMp4Title(item.cdnUrl);
+      if (title) {
+        bulkItems[i].title = title;
+        // Update input in DOM if rendered
+        var inputs = document.querySelectorAll('#bulk-list input[type=text][data-idx="' + i + '"]');
+        if (inputs.length) inputs[0].value = title;
+      }
+      done++;
+      info.innerHTML = '⏳ Mengambil judul dari metadata... <b>' + done + '/' + total + '</b>';
+    }
+  }
+
+  var workers = [];
+  for (var w = 0; w < Math.min(5, total); w++) workers.push(worker());
+  await Promise.all(workers);
+
+  var found = bulkItems.filter(function(x) { return x.title && !x.title.startsWith('Video '); }).length;
+  var directCount = bulkItems.filter(function(x) { return x.direct; }).length;
+  var convertCount = total - directCount;
+  var msg = '✅ ' + total + ' link ditemukan';
+  if (directCount > 0) msg += ' · <span style="color:var(--success)">' + directCount + ' CDN langsung</span>';
+  if (convertCount > 0) msg += ' · <span style="color:var(--accent2)">' + convertCount + ' dikonversi</span>';
+  if (found > 0) msg += ' · <span style="color:var(--muted)">' + found + ' judul berhasil diambil</span>';
+  info.innerHTML = msg;
+}
+
 function bulkScan() {
   var text = document.getElementById('bulk-input').value;
   var info = document.getElementById('bulk-scan-info');
@@ -935,6 +1024,7 @@ function bulkScan() {
   renderBulkList();
   document.getElementById('bulk-step1').style.display = 'none';
   document.getElementById('bulk-step2').style.display = 'block';
+  bulkFetchTitles();
 }
 
 function escH(s) {
