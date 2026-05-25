@@ -1,0 +1,21 @@
+kind = "web"
+previewPath = "/"
+title = "VideoKoleksi"
+version = "1.0.0"
+id = "artifacts/video-koleksi"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23856
+
+[services.development]
+run = "pnpm --filter @workspace/video-koleksi run dev"
+
+[services.env]
+PORT = "23856"

@@ -1,0 +1,11 @@
+{
+  "name": "@workspace/video-koleksi",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "build": "echo 'No build needed for CF worker preview'",
+    "typecheck": "echo 'No typecheck for worker preview'"
+  }
+}
