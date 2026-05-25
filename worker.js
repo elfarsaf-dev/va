@@ -865,8 +865,8 @@ async function renderAdmin(req, env, flash = "") {
           </div>
           <button class="btn btn-primary" onclick="bulkScan()" style="flex-shrink:0">🔍 Scan Link</button>
         </div>
-        <div id="bulk-scan-info" style="display:none;margin-top:10px;font-size:0.8rem;color:var(--muted)"></div>
       </div>
+      <div id="bulk-scan-info" style="display:none;margin-top:10px;font-size:0.8rem;color:var(--muted);padding:8px 12px;border-radius:8px;background:var(--bg3)"></div>
 
       <!-- Step 2: Preview results -->
       <div id="bulk-step2" style="display:none">
@@ -1064,73 +1064,91 @@ async function bulkFetchTitles() {
 }
 
 function bulkScan() {
-  var text = document.getElementById('bulk-input').value;
   var info = document.getElementById('bulk-scan-info');
-  var seen = {};
-  var found = [];
-
-  // Split by lines or spaces/commas, process each token
-  var tokens = text.split(/[\n\r,\s]+/).map(function(t) { return t.trim(); }).filter(Boolean);
-
-  for (var t = 0; t < tokens.length; t++) {
-    var token = tokens[t];
-
-    // Pattern 1: already a cdn.videy.co/{id}.mp4 URL — keep as-is
-    var cdnMatch = token.match(/cdn\.videy\.co\/([A-Za-z0-9_\-]+\.mp4)/i);
-    if (cdnMatch) {
-      var id = cdnMatch[1].replace(/\.mp4$/i, '');
-      var fullUrl = 'https://cdn.videy.co/' + id + '.mp4';
-      if (!seen[fullUrl]) {
-        seen[fullUrl] = true;
-        found.push({ id: id, cdnUrl: fullUrl, direct: true });
-      }
-      continue;
-    }
-
-    // Pattern 2: any other direct .mp4 URL — use as-is
-    var mp4Match = token.match(/^https?:\/\/[^\s"'<>]+\.mp4(\?[^\s"'<>]*)?$/i);
-    if (mp4Match) {
-      if (!seen[token]) {
-        seen[token] = true;
-        var mp4Id = token.replace(/^https?:\/\//, '').replace(/[^A-Za-z0-9_\-]/g, '_').slice(0, 20);
-        found.push({ id: mp4Id, cdnUrl: token, direct: true });
-      }
-      continue;
-    }
-
-    // Pattern 3: ?id= or &id= param — extract ID and construct CDN URL
-    var idMatch = token.match(/[?&]id=([A-Za-z0-9_\-]+)/);
-    if (idMatch) {
-      var id = idMatch[1];
-      var fullUrl = 'https://cdn.videy.co/' + id + '.mp4';
-      if (id.length >= 3 && !seen[fullUrl]) {
-        seen[fullUrl] = true;
-        found.push({ id: id, cdnUrl: fullUrl, direct: false });
-      }
-    }
-  }
-
   info.style.display = 'block';
-  if (!found.length) {
-    info.innerHTML = '❌ Tidak ada link yang dikenali. Masukkan link <b>cdn.videy.co/{id}.mp4</b>, <b>?id=VALUE</b>, atau URL .mp4 langsung.';
-    return;
+  info.innerHTML = '⏳ Memproses...';
+  try {
+    var text = document.getElementById('bulk-input').value.trim();
+    if (!text) {
+      info.innerHTML = '❌ Textarea kosong. Paste link dulu sebelum scan.';
+      return;
+    }
+    var seen = {};
+    var found = [];
+
+    // Split by lines first, then by comma/space as fallback
+    var lines = text.split(/[\n\r]+/);
+    var tokens = [];
+    for (var li = 0; li < lines.length; li++) {
+      var parts = lines[li].split(/[,\s]+/);
+      for (var pi = 0; pi < parts.length; pi++) {
+        var p = parts[pi].trim();
+        if (p) tokens.push(p);
+      }
+    }
+
+    for (var t = 0; t < tokens.length; t++) {
+      var token = tokens[t];
+
+      // Pattern 1: cdn.videy.co/{id}.mp4 URL
+      var cdnMatch = token.match(/cdn\.videy\.co\/([A-Za-z0-9_\-]+)(?:\.mp4)?/i);
+      if (cdnMatch) {
+        var vid = cdnMatch[1];
+        var fullUrl = 'https://cdn.videy.co/' + vid + '.mp4';
+        if (!seen[fullUrl]) { seen[fullUrl] = true; found.push({ id: vid, cdnUrl: fullUrl, direct: true }); }
+        continue;
+      }
+
+      // Pattern 2: any other direct .mp4 URL
+      if (/^https?:\/\/[^\s"'<>]+\.mp4(\?[^\s"'<>]*)?$/i.test(token)) {
+        if (!seen[token]) {
+          seen[token] = true;
+          var mp4Id = token.replace(/^https?:\/\//, '').replace(/[^A-Za-z0-9_\-]/g, '_').slice(0, 24);
+          found.push({ id: mp4Id, cdnUrl: token, direct: true });
+        }
+        continue;
+      }
+
+      // Pattern 3: ?id= or &id= param (e.g. videy.co/v?id=XXX)
+      var idMatch = token.match(/[?&]id=([A-Za-z0-9_\-]+)/);
+      if (idMatch) {
+        var vid2 = idMatch[1];
+        var fullUrl2 = 'https://cdn.videy.co/' + vid2 + '.mp4';
+        if (vid2.length >= 3 && !seen[fullUrl2]) { seen[fullUrl2] = true; found.push({ id: vid2, cdnUrl: fullUrl2, direct: false }); }
+        continue;
+      }
+
+      // Pattern 4: plain alphanumeric ID (6-16 chars, looks like a videy ID)
+      if (/^[A-Za-z0-9_\-]{6,20}$/.test(token) && token.indexOf('.') === -1) {
+        var fullUrl3 = 'https://cdn.videy.co/' + token + '.mp4';
+        if (!seen[fullUrl3]) { seen[fullUrl3] = true; found.push({ id: token, cdnUrl: fullUrl3, direct: false }); }
+      }
+    }
+
+    if (!found.length) {
+      info.innerHTML = '❌ Tidak ada link yang dikenali.<br><small>Format yang didukung: <b>cdn.videy.co/ID.mp4</b>, URL <b>.mp4</b> langsung, link dengan <b>?id=...</b>, atau plain <b>ID</b> videy.</small>';
+      return;
+    }
+
+    var directCount = found.filter(function(x) { return x.direct; }).length;
+    var convertCount = found.length - directCount;
+    var msg = '✅ ' + found.length + ' link ditemukan';
+    if (directCount > 0) msg += ' · <span style="color:var(--success)">' + directCount + ' CDN</span>';
+    if (convertCount > 0) msg += ' · <span style="color:var(--accent2)">' + convertCount + ' dikonversi</span>';
+    info.innerHTML = msg;
+
+    bulkItems = found.map(function(item) {
+      return { id: item.id, cdnUrl: item.cdnUrl, selected: true, title: 'Video ' + item.id, direct: item.direct, duration: null };
+    });
+    document.getElementById('bulk-count').textContent = bulkItems.length + ' link ditemukan';
+    renderBulkList();
+    document.getElementById('bulk-step1').style.display = 'none';
+    document.getElementById('bulk-step2').style.display = 'block';
+    bulkFetchTitles();
+  } catch(err) {
+    info.innerHTML = '❌ Error: ' + err.message;
+    console.error('bulkScan error:', err);
   }
-
-  var directCount = found.filter(function(x) { return x.direct; }).length;
-  var convertCount = found.length - directCount;
-  var msg = '✅ ' + found.length + ' link ditemukan';
-  if (directCount > 0) msg += ' · <span style="color:var(--success)">' + directCount + ' sudah berformat CDN</span>';
-  if (convertCount > 0) msg += ' · <span style="color:var(--accent2)">' + convertCount + ' dikonversi dari ID</span>';
-  info.innerHTML = msg;
-
-  bulkItems = found.map(function(item) {
-    return { id: item.id, cdnUrl: item.cdnUrl, selected: true, title: 'Video ' + item.id, direct: item.direct };
-  });
-  document.getElementById('bulk-count').textContent = bulkItems.length + ' link ditemukan';
-  renderBulkList();
-  document.getElementById('bulk-step1').style.display = 'none';
-  document.getElementById('bulk-step2').style.display = 'block';
-  bulkFetchTitles();
 }
 
 function escH(s) {
