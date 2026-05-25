@@ -504,18 +504,44 @@ ${body}
 <script>
 // Video modal
 function openVideo(id) {
-  document.getElementById('modal-'+id).style.display='flex';
-  document.body.style.overflow='hidden';
+  const modal = document.getElementById('modal-'+id);
+  if (!modal) return;
+  const wrap = modal.querySelector('.embed-wrap');
+  if (wrap && !wrap.firstChild) {
+    const src = wrap.dataset.src;
+    const type = wrap.dataset.type;
+    if (type === 'mp4') {
+      const vid = document.createElement('video');
+      vid.src = src; vid.controls = true; vid.autoplay = true; vid.playsInline = true;
+      vid.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000';
+      wrap.appendChild(vid);
+    } else {
+      const fr = document.createElement('iframe');
+      fr.src = src; fr.allowFullscreen = true;
+      fr.allow = 'autoplay; encrypted-media'; fr.loading = 'lazy';
+      wrap.appendChild(fr);
+    }
+  }
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
 }
 function closeModal(id) {
   const m = document.getElementById('modal-'+id);
-  if(m) { m.style.display='none'; document.body.style.overflow=''; }
-  // pause iframe by resetting src
-  const iframe = m && m.querySelector('iframe');
-  if(iframe) { const s=iframe.src; iframe.src=''; iframe.src=s; }
+  if (!m) return;
+  m.style.display = 'none';
+  document.body.style.overflow = '';
+  const wrap = m.querySelector('.embed-wrap');
+  if (wrap) wrap.innerHTML = '';  // destroy player → stops all audio/video
 }
 document.addEventListener('keydown', e => {
-  if(e.key==='Escape') document.querySelectorAll('.modal-overlay').forEach(m=>{ m.style.display='none'; document.body.style.overflow=''; });
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+      m.style.display = 'none';
+      const wrap = m.querySelector('.embed-wrap');
+      if (wrap) wrap.innerHTML = '';
+    });
+    document.body.style.overflow = '';
+  }
 });
 </script>
 </body>
@@ -562,9 +588,8 @@ function renderVideoCard(v) {
          <div class="thumb-placeholder" style="display:none"><div class="play-icon">${playIcon}</div></div>`
       : `<div class="thumb-placeholder"><div class="play-icon">${playIcon}</div></div>`;
 
-  const playerHtml = isMp4
-    ? `<video src="${escHtml(v.url)}" controls autoplay playsinline style="width:100%;height:100%;object-fit:contain;background:#000"></video>`
-    : `<iframe src="${escHtml(embed || v.url)}" allowfullscreen allow="autoplay; encrypted-media" loading="lazy"></iframe>`;
+  const playerSrc = escHtml(isMp4 ? v.url : (embed || v.url));
+  const playerType = isMp4 ? "mp4" : "iframe";
 
   const durBadge = v.duration ? `<div class="duration-badge">${fmtDuration(v.duration)}</div>` : "";
 
@@ -588,9 +613,7 @@ function renderVideoCard(v) {
       <div></div>
       <button class="modal-close" onclick="closeModal('${escHtml(v.id)}')">&times;</button>
     </div>
-    <div class="embed-wrap">
-      ${playerHtml}
-    </div>
+    <div class="embed-wrap" data-src="${playerSrc}" data-type="${playerType}"></div>
     <div class="modal-body">
       ${v.category ? `<div class="modal-category">${escHtml(v.category)}</div>` : ""}
       <div class="modal-title">${escHtml(v.title)}</div>
