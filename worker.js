@@ -812,7 +812,7 @@ async function renderAdmin(req, env, flash = "") {
       <div id="bulk-step1">
         <div class="form-group">
           <label>Paste link-link videy di sini (satu per baris atau campur dengan teks lain)</label>
-          <textarea id="bulk-input" rows="8" placeholder="https://videy.co/v?id=hQF0u32U1&#10;https://videvideoy.site/u3lun&#10;https://videyvideo.short.gy/blH8n1&#10;..." style="width:100%;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical"></textarea>
+          <textarea id="bulk-input" rows="8" placeholder="cdn.videy.co/hQF0u32U1.mp4&#10;https://cdn.videy.co/xYz123.mp4&#10;https://videy.co/v?id=hQF0u32U1&#10;https://videvideoy.site/u3lun&#10;https://other-host.com/video.mp4&#10;&#10;Format yang didukung:&#10;• cdn.videy.co/{id}.mp4 → langsung dipakai&#10;• URL .mp4 lainnya → langsung dipakai&#10;• Link dengan ?id= → dikonversi ke CDN" style="width:100%;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical"></textarea>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <div class="form-group" style="margin:0;flex:1;min-width:160px">
@@ -873,26 +873,65 @@ function bulkScan() {
   var info = document.getElementById('bulk-scan-info');
   var seen = {};
   var found = [];
-  // Extract any ?id=VALUE or &id=VALUE from anywhere in the text
-  var re = /[?&]id=([A-Za-z0-9_\-]+)/g;
-  var m;
-  while ((m = re.exec(text)) !== null) {
-    var id = m[1];
-    if (id.length >= 3 && !seen[id]) {
-      seen[id] = true;
-      found.push(id);
+
+  // Split by lines or spaces/commas, process each token
+  var tokens = text.split(/[\n\r,\s]+/).map(function(t) { return t.trim(); }).filter(Boolean);
+
+  for (var t = 0; t < tokens.length; t++) {
+    var token = tokens[t];
+
+    // Pattern 1: already a cdn.videy.co/{id}.mp4 URL — keep as-is
+    var cdnMatch = token.match(/cdn\.videy\.co\/([A-Za-z0-9_\-]+\.mp4)/i);
+    if (cdnMatch) {
+      var id = cdnMatch[1].replace(/\.mp4$/i, '');
+      var fullUrl = 'https://cdn.videy.co/' + id + '.mp4';
+      if (!seen[fullUrl]) {
+        seen[fullUrl] = true;
+        found.push({ id: id, cdnUrl: fullUrl, direct: true });
+      }
+      continue;
+    }
+
+    // Pattern 2: any other direct .mp4 URL — use as-is
+    var mp4Match = token.match(/^https?:\/\/[^\s"'<>]+\.mp4(\?[^\s"'<>]*)?$/i);
+    if (mp4Match) {
+      if (!seen[token]) {
+        seen[token] = true;
+        var mp4Id = token.replace(/^https?:\/\//, '').replace(/[^A-Za-z0-9_\-]/g, '_').slice(0, 20);
+        found.push({ id: mp4Id, cdnUrl: token, direct: true });
+      }
+      continue;
+    }
+
+    // Pattern 3: ?id= or &id= param — extract ID and construct CDN URL
+    var idMatch = token.match(/[?&]id=([A-Za-z0-9_\-]+)/);
+    if (idMatch) {
+      var id = idMatch[1];
+      var fullUrl = 'https://cdn.videy.co/' + id + '.mp4';
+      if (id.length >= 3 && !seen[fullUrl]) {
+        seen[fullUrl] = true;
+        found.push({ id: id, cdnUrl: fullUrl, direct: false });
+      }
     }
   }
+
   info.style.display = 'block';
   if (!found.length) {
-    info.innerHTML = 'Tidak ada ID yang ditemukan. Pastikan link mengandung <b>?id=</b> atau <b>&amp;id=</b>.';
+    info.innerHTML = '❌ Tidak ada link yang dikenali. Masukkan link <b>cdn.videy.co/{id}.mp4</b>, <b>?id=VALUE</b>, atau URL .mp4 langsung.';
     return;
   }
-  info.innerHTML = '';
-  bulkItems = found.map(function(id) {
-    return { id: id, cdnUrl: 'https://cdn.videy.co/' + id + '.mp4', selected: true, title: 'Video ' + id };
+
+  var directCount = found.filter(function(x) { return x.direct; }).length;
+  var convertCount = found.length - directCount;
+  var msg = '✅ ' + found.length + ' link ditemukan';
+  if (directCount > 0) msg += ' · <span style="color:var(--success)">' + directCount + ' sudah berformat CDN</span>';
+  if (convertCount > 0) msg += ' · <span style="color:var(--accent2)">' + convertCount + ' dikonversi dari ID</span>';
+  info.innerHTML = msg;
+
+  bulkItems = found.map(function(item) {
+    return { id: item.id, cdnUrl: item.cdnUrl, selected: true, title: 'Video ' + item.id, direct: item.direct };
   });
-  document.getElementById('bulk-count').textContent = bulkItems.length + ' ID ditemukan';
+  document.getElementById('bulk-count').textContent = bulkItems.length + ' link ditemukan';
   renderBulkList();
   document.getElementById('bulk-step1').style.display = 'none';
   document.getElementById('bulk-step2').style.display = 'block';
@@ -908,11 +947,17 @@ function renderBulkList() {
   for (var i = 0; i < bulkItems.length; i++) {
     var item = bulkItems[i];
     var chk = item.selected ? ' checked' : '';
+    var badge = item.direct
+      ? '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(52,211,153,0.15);color:var(--success);font-weight:600;flex-shrink:0">CDN ✓</span>'
+      : '<span style="font-size:0.62rem;padding:1px 7px;border-radius:10px;background:rgba(167,139,250,0.15);color:var(--accent2);font-weight:600;flex-shrink:0">ID→CDN</span>';
     html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">';
     html += '<input type="checkbox"' + chk + ' data-idx="' + i + '" onchange="bulkToggle(this)" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0">';
     html += '<div style="flex:1;min-width:0">';
-    html += '<input type="text" value="' + escH(item.title) + '" data-idx="' + i + '" oninput="bulkTitle(this)" style="width:100%;padding:5px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;margin-bottom:4px;outline:none">';
-    html += '<div style="font-size:0.72rem;color:var(--accent2);font-family:monospace">' + escH(item.cdnUrl) + '</div>';
+    html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">';
+    html += '<input type="text" value="' + escH(item.title) + '" data-idx="' + i + '" oninput="bulkTitle(this)" style="flex:1;padding:5px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;outline:none">';
+    html += badge;
+    html += '</div>';
+    html += '<div style="font-size:0.7rem;color:var(--muted);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(item.cdnUrl) + '</div>';
     html += '</div></div>';
   }
   container.innerHTML = html;
