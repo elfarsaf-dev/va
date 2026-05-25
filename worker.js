@@ -927,9 +927,9 @@ async function fetchMp4Meta(url) {
 
     // Content-Disposition filename
     var cd = res.headers.get('content-disposition') || '';
-    var cdMatch = cd.match(/filename\*?=(?:UTF-8''|")?([^";\n]+)/i);
+    var cdMatch = cd.match(/filename\\*?=(?:UTF-8''|")?([^";\\n]+)/i);
     if (cdMatch) {
-      var cdName = decodeURIComponent(cdMatch[1].trim().replace(/^"|"$/g,'').replace(/\.mp4$/i,''));
+      var cdName = decodeURIComponent(cdMatch[1].trim().replace(/^"|"$/g,'').replace(/\\.mp4$/i,''));
       if (cdName && cdName.length > 2) result.title = cdName;
     }
 
@@ -973,7 +973,7 @@ async function fetchMp4Meta(url) {
   if (!result.title) {
     try {
       var parts = new URL(url).pathname.split('/');
-      var fname = parts[parts.length-1].replace(/\.mp4$/i,'').replace(/[_\-\.]+/g,' ').trim();
+      var fname = parts[parts.length-1].replace(/\\.mp4$/i,'').replace(/[_\\-\\.]+/g,' ').trim();
       if (fname && fname.length > 2) result.title = fname.charAt(0).toUpperCase() + fname.slice(1);
     } catch(e) {}
   }
@@ -1079,10 +1079,10 @@ function bulkScan() {
     var found = [];
 
     // Split by lines first, then by comma/space as fallback
-    var lines = text.split(/[\n\r]+/);
+    var lines = text.split(/[\\n\\r]+/);
     var tokens = [];
     for (var li = 0; li < lines.length; li++) {
-      var parts = lines[li].split(/[,\s]+/);
+      var parts = lines[li].split(/[,\\s]+/);
       for (var pi = 0; pi < parts.length; pi++) {
         var p = parts[pi].trim();
         if (p) tokens.push(p);
@@ -1093,7 +1093,7 @@ function bulkScan() {
       var token = tokens[t];
 
       // Pattern 1: cdn.videy.co/{id}.mp4 URL
-      var cdnMatch = token.match(/cdn\.videy\.co\/([A-Za-z0-9_\-]+)(?:\.mp4)?/i);
+      var cdnMatch = token.match(/cdn\\.videy\\.co\\/([A-Za-z0-9_\\-]+)(?:\\.mp4)?/i);
       if (cdnMatch) {
         var vid = cdnMatch[1];
         var fullUrl = 'https://cdn.videy.co/' + vid + '.mp4';
@@ -1102,17 +1102,17 @@ function bulkScan() {
       }
 
       // Pattern 2: any other direct .mp4 URL
-      if (/^https?:\/\/[^\s"'<>]+\.mp4(\?[^\s"'<>]*)?$/i.test(token)) {
+      if (/^https?:\\/\\/[^\\s"'<>]+\\.mp4(\\?[^\\s"'<>]*)?$/i.test(token)) {
         if (!seen[token]) {
           seen[token] = true;
-          var mp4Id = token.replace(/^https?:\/\//, '').replace(/[^A-Za-z0-9_\-]/g, '_').slice(0, 24);
+          var mp4Id = token.replace(/^https?:\\/\\//, '').replace(/[^A-Za-z0-9_\\-]/g, '_').slice(0, 24);
           found.push({ id: mp4Id, cdnUrl: token, direct: true });
         }
         continue;
       }
 
       // Pattern 3: ?id= or &id= param (e.g. videy.co/v?id=XXX)
-      var idMatch = token.match(/[?&]id=([A-Za-z0-9_\-]+)/);
+      var idMatch = token.match(/[?&]id=([A-Za-z0-9_\\-]+)/);
       if (idMatch) {
         var vid2 = idMatch[1];
         var fullUrl2 = 'https://cdn.videy.co/' + vid2 + '.mp4';
@@ -1121,7 +1121,7 @@ function bulkScan() {
       }
 
       // Pattern 4: plain alphanumeric ID (6-16 chars, looks like a videy ID)
-      if (/^[A-Za-z0-9_\-]{6,20}$/.test(token) && token.indexOf('.') === -1) {
+      if (/^[A-Za-z0-9_\\-]{6,20}$/.test(token) && token.indexOf('.') === -1) {
         var fullUrl3 = 'https://cdn.videy.co/' + token + '.mp4';
         if (!seen[fullUrl3]) { seen[fullUrl3] = true; found.push({ id: token, cdnUrl: fullUrl3, direct: false }); }
       }
