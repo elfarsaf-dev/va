@@ -136,6 +136,8 @@ function getThumbnail(url) {
   if (yt) return `https://img.youtube.com/vi/${yt[1]}/hqdefault.jpg`;
   const vim = url.match(/vimeo\.com\/(\d+)/);
   if (vim) return `https://vumbnail.com/${vim[1]}.jpg`;
+  // CDN .mp4 → try same URL with .jpg (works for cdn.videy.co and similar CDNs)
+  if (/\.mp4(\?.*)?$/i.test(url)) return url.replace(/\.mp4(\?.*)?$/i, '.jpg');
   return null;
 }
 
@@ -497,7 +499,8 @@ function renderVideoCard(v) {
 <div class="video-card" onclick="openVideo('${escHtml(v.id)}')">
   <div class="video-thumb">
     ${thumb
-      ? `<img src="${escHtml(thumb)}" alt="${escHtml(v.title)}" loading="lazy">`
+      ? `<img src="${escHtml(thumb)}" alt="${escHtml(v.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">\
+<div class="thumb-placeholder" style="display:none"><div class="play-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>`
       : `<div class="thumb-placeholder"><div class="play-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>`
     }
   </div>
