@@ -442,14 +442,12 @@ function layout(title, body, { isAdmin = false, navExtra = "" } = {}) {
     VideoKoleksi
   </a>
   <div class="nav-links">
+    ${isAdmin ? `
     <a href="/">Koleksi</a>
-    ${isAdmin
-      ? `<a href="/admin">Admin</a>
-         <form method="POST" action="/logout" style="display:inline">
-           <button type="submit" style="padding:6px 16px;border-radius:6px;font-size:0.875rem;font-weight:500;border:none;cursor:pointer;background:transparent;color:var(--muted)">Keluar</button>
-         </form>`
-      : `<a href="/login">Admin</a>`
-    }
+    <a href="/admin">Admin</a>
+    <form method="POST" action="/logout" style="display:inline">
+      <button type="submit" style="padding:6px 16px;border-radius:6px;font-size:0.875rem;font-weight:500;border:none;cursor:pointer;background:transparent;color:var(--muted)">Keluar</button>
+    </form>` : ""}
     ${navExtra}
   </div>
 </nav>
@@ -584,7 +582,7 @@ async function renderHome(req, env) {
   }
 </div>`;
 
-  return new Response(layout("Koleksi Video", body), {
+  return new Response(layout("Koleksi Video", body, { isAdmin: true }), {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });
 }
@@ -592,8 +590,8 @@ async function renderHome(req, env) {
 async function renderLogin(req, env, flash = "") {
   const body = `
 <div class="form-card">
-  <div class="form-title">Login Admin</div>
-  <div class="form-subtitle">Masukkan password untuk mengakses panel admin</div>
+  <div class="form-title">Selamat Datang</div>
+  <div class="form-subtitle">Masukkan password untuk mengakses koleksi video</div>
   ${flash ? `<div class="alert alert-error">${escHtml(flash)}</div>` : ""}
   <form method="POST" action="/login">
     <div class="form-group">
@@ -771,20 +769,15 @@ export default {
 
     // ── Static: robots.txt
     if (path === "/robots.txt") {
-      return new Response("User-agent: *\nDisallow: /admin\nDisallow: /login", {
+      return new Response("User-agent: *\nDisallow: /", {
         headers: { "Content-Type": "text/plain" },
       });
-    }
-
-    // ── GET /
-    if (path === "/" && method === "GET") {
-      return renderHome(req, env);
     }
 
     // ── GET /login
     if (path === "/login" && method === "GET") {
       const authed = await isAuthenticated(req, sessionSecret);
-      if (authed) return Response.redirect(new URL("/admin", req.url), 302);
+      if (authed) return Response.redirect(new URL("/", req.url), 302);
       return renderLogin(req, env);
     }
 
@@ -797,7 +790,7 @@ export default {
         return new Response(null, {
           status: 302,
           headers: {
-            Location: "/admin",
+            Location: "/",
             "Set-Cookie": `admin_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400`,
           },
         });
@@ -810,17 +803,27 @@ export default {
       return new Response(null, {
         status: 302,
         headers: {
-          Location: "/",
+          Location: "/login",
           "Set-Cookie": "admin_session=; Path=/; HttpOnly; Max-Age=0",
         },
       });
     }
 
-    // ── Admin guard
+    // ── Global auth guard — semua halaman butuh login
+    const authedGlobal = await isAuthenticated(req, sessionSecret);
+    if (!authedGlobal) {
+      return Response.redirect(new URL("/login", req.url), 302);
+    }
+
+    // ── GET /
+    if (path === "/" && method === "GET") {
+      return renderHome(req, env);
+    }
+
+    // ── Admin routes (already authenticated via global guard above)
     const adminPaths = ["/admin", "/admin/add", "/admin/edit", "/admin/delete"];
     if (adminPaths.some(p => path === p || path.startsWith(p))) {
-      const authed = await isAuthenticated(req, sessionSecret);
-      if (!authed) return Response.redirect(new URL("/login", req.url), 302);
+      const authed = true; // already checked above
 
       // GET /admin
       if (path === "/admin" && method === "GET") {
