@@ -630,8 +630,7 @@ function layout(title, body, { isAdmin = false, navExtra = "" } = {}) {
   <a class="nav-brand" href="/">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="-webkit-text-fill-color:initial">
       <polygon points="5 3 19 12 5 21 5 3" fill="var(--accent)"/>
-    </svg>
-    VideoKoleksi
+    </svg>V
   </a>
   <div class="nav-links">
     ${isAdmin ? `
