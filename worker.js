@@ -617,6 +617,7 @@ function layout(title, body, { isAdmin = false, navExtra = "" } = {}) {
   <div class="nav-links">
     ${isAdmin ? `
     <a href="/">Koleksi</a>
+    <a href="/recent">Riwayat</a>
     <a href="/admin">Admin</a>
     <form method="POST" action="/logout" style="display:inline">
       <button type="submit" style="padding:6px 16px;border-radius:6px;font-size:0.875rem;font-weight:500;border:none;cursor:pointer;background:transparent;color:var(--muted)">Keluar</button>
@@ -1028,6 +1029,127 @@ function renderVideoCard(v) {
 </div>`;
 }
 
+async function renderRecentPage(req, env) {
+  const body = `
+<div style="padding:20px 16px 16px;max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between">
+  <div style="display:flex;align-items:center;gap:12px">
+    <a href="/" class="btn btn-ghost btn-sm" style="text-decoration:none">&#8592; Kembali</a>
+    <h2 style="margin:0;font-size:1.1rem;font-weight:700">Terakhir Dilihat</h2>
+  </div>
+  <button id="rp-clear-btn" class="btn btn-ghost btn-sm" style="display:none;color:var(--danger)" onclick="rpClear()">Hapus Semua</button>
+</div>
+<div class="container">
+  <div id="rp-empty" class="empty" style="display:none">
+    <div class="empty-icon">&#128065;</div>
+    <h3>Belum ada riwayat</h3>
+    <p>Video yang kamu tonton akan muncul di sini.</p>
+  </div>
+  <div class="video-grid" id="rp-grid"></div>
+</div>
+<div class="modal-overlay" id="rp-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <div></div>
+      <button class="modal-close" onclick="rpCloseModal()">&times;</button>
+    </div>
+    <div class="embed-wrap" id="rp-embed"></div>
+    <div class="modal-body" id="rp-modal-body"></div>
+  </div>
+</div>
+<script>
+(function() {
+  var KEY = 'vk_recent';
+  function gr() { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch(e) { return []; } }
+  function sr(a) { try { localStorage.setItem(KEY, JSON.stringify(a)); } catch(e) {} }
+  function ta(ts) {
+    var d = Date.now() - ts, m = Math.floor(d/60000);
+    if (m < 1) return 'baru saja';
+    if (m < 60) return m + 'm lalu';
+    var h = Math.floor(m/60);
+    if (h < 24) return h + 'j lalu';
+    return Math.floor(h/24) + 'h lalu';
+  }
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+  window.rpClear = function() { localStorage.removeItem(KEY); location.reload(); };
+
+  window.rpCloseModal = function() {
+    var m = document.getElementById('rp-modal');
+    if (!m) return;
+    var emb = document.getElementById('rp-embed');
+    if (emb) emb.innerHTML = '';
+    m.style.display = 'none';
+    document.body.style.overflow = '';
+  };
+
+  window.rpOpenModal = function(idx) {
+    var recent = gr();
+    var r = recent[idx];
+    if (!r) return;
+    recent.splice(idx, 1);
+    recent.unshift({id:r.id,title:r.title,thumb:r.thumb||'',rawurl:r.rawurl||'',ts:Date.now(),page:r.page||1,cat:r.cat||'',q:r.q||''});
+    sr(recent);
+    var isMp4 = r.rawurl && /\.mp4(\?|$)/i.test(r.rawurl);
+    var emb = document.getElementById('rp-embed');
+    emb.innerHTML = '';
+    if (isMp4 && r.rawurl) {
+      var v = document.createElement('video');
+      v.src = r.rawurl; v.controls = true; v.autoplay = true; v.playsInline = true;
+      v.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000';
+      emb.appendChild(v);
+    } else if (r.rawurl) {
+      var fr = document.createElement('iframe');
+      fr.src = r.rawurl; fr.allowFullscreen = true;
+      fr.allow = 'autoplay; encrypted-media'; fr.loading = 'lazy';
+      emb.appendChild(fr);
+    }
+    var mb = document.getElementById('rp-modal-body');
+    mb.innerHTML = (r.cat ? '<div class="modal-category">'+esc(r.cat)+'</div>' : '') + '<div class="modal-title">'+esc(r.title)+'</div>';
+    var m = document.getElementById('rp-modal');
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    m.onclick = function(e) { if (e.target === m) rpCloseModal(); };
+  };
+
+  var recent = gr();
+  var grid = document.getElementById('rp-grid');
+  var empty = document.getElementById('rp-empty');
+  var clearBtn = document.getElementById('rp-clear-btn');
+  if (!recent.length) { if (empty) empty.style.display = ''; return; }
+  if (clearBtn) clearBtn.style.display = '';
+  var html = '';
+  for (var i = 0; i < recent.length; i++) {
+    var r = recent[i];
+    var isMp4 = r.rawurl && /\.mp4(\?|$)/i.test(r.rawurl);
+    var tHtml;
+    if (isMp4 && r.rawurl) {
+      tHtml = '<video src="'+esc(r.rawurl)+'" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;display:block" onloadedmetadata="this.currentTime=0.001"></video>';
+    } else if (r.thumb) {
+      tHtml = '<img src="'+esc(r.thumb)+'" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block">';
+    } else {
+      tHtml = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2rem;color:var(--muted)">&#9654;</div>';
+    }
+    html += '<div class="video-card" style="cursor:pointer" data-ridx="'+i+'">';
+    html += '<div class="video-thumb">'+tHtml+'</div>';
+    html += '<div class="video-info">';
+    if (r.cat) html += '<div class="video-category">'+esc(r.cat)+'</div>';
+    html += '<div class="video-title">'+esc(r.title)+'</div>';
+    html += '<div class="video-meta">'+ta(r.ts)+'</div>';
+    html += '</div></div>';
+  }
+  grid.innerHTML = html;
+  grid.addEventListener('click', function(e) {
+    var card = e.target.closest('.video-card');
+    if (card && card.dataset.ridx !== undefined) rpOpenModal(parseInt(card.dataset.ridx, 10));
+  });
+})();
+</script>`;
+
+  return new Response(layout('Terakhir Dilihat', body, { isAdmin: true }), {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
+
 async function renderHome(req, env) {
   const { supabaseKey } = getEnv(env);
   const url = new URL(req.url);
@@ -1071,7 +1193,6 @@ async function renderHome(req, env) {
   </form>
 </div>
 <div class="container">
-  <div id="vk-recent-wrap"></div>
   ${error ? `<div class="alert alert-error">Gagal memuat: ${escHtml(error)}</div>` : ""}
   <div class="filters">${filterBtns}</div>
   ${videos && videos.length > 0
@@ -1688,6 +1809,11 @@ export default {
     // ── GET /
     if (path === "/" && method === "GET") {
       return renderHome(req, env);
+    }
+
+    // ── GET /recent
+    if (path === "/recent" && method === "GET") {
+      return renderRecentPage(req, env);
     }
 
     // ── POST /api/move-cat — update video category
