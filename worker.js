@@ -760,13 +760,13 @@ function vkRenderRecent() {
     if (isMp4 && r.rawurl) {
       tHtml = '<video src="' + r.rawurl + '" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;display:block" onloadedmetadata="this.currentTime=0.001"></video>';
     } else if (r.thumb) {
-      tHtml = '<img src="' + r.thumb + '" style="width:100%;height:100%;object-fit:cover;display:block" loading="lazy" onerror="this.parentNode.innerHTML=\'<div class=recent-ph>&#9654;</div>\'">';
+      tHtml = '<img src="' + r.thumb + '" style="width:100%;height:100%;object-fit:cover;display:block" loading="lazy" onerror="vkThumbErr(this)">';
     } else {
       tHtml = '<div class="recent-ph">&#9654;</div>';
     }
     var safeTitle = r.title.replace(/&/g,'&amp;').replace(/</g,'&lt;');
     var pageMeta = 'Hal.' + r.page + (r.cat ? ' \u00b7 ' + r.cat : '') + (r.q ? ' \u00b7 "' + r.q + '"' : '');
-    html += '<div class="recent-card" onclick="openVideo(\'' + r.id + '\')">';
+    html += '<div class="recent-card" data-rid="' + r.id + '">';
     html += '<div class="recent-thumb">' + tHtml + '</div>';
     html += '<div class="recent-title">' + safeTitle + '</div>';
     html += '<div class="recent-meta">' + vkTimeAgo(r.ts) + ' &middot; ' + pageMeta + '</div>';
@@ -891,7 +891,7 @@ function vkShowCatSheet(ids) {
     '<div class="cat-chips">' + chipsHtml + '</div>' +
     '<div class="cat-custom-row">' +
     '<input type="text" id="vk-cat-inp" placeholder="Kategori baru...">' +
-    '<button class="btn btn-primary btn-sm" onclick="var v=document.getElementById(\'vk-cat-inp\').value.trim();if(v)vkPickCat(v)">OK</button>' +
+    '<button class="btn btn-primary btn-sm" onclick="vkSubmitCatInp()">OK</button>' +
     '</div>' +
     '<button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="vkCloseCatSheet()">Batal</button>' +
     '</div>';
@@ -915,10 +915,23 @@ function vkPickCat(cat) {
   });
 }
 
+// ── Helpers for inline handlers ────────────────────────────────────
+function vkThumbErr(el) {
+  el.parentNode.innerHTML = '<div class="recent-ph">&#9654;</div>';
+}
+function vkSubmitCatInp() {
+  var el = document.getElementById('vk-cat-inp');
+  if (el && el.value.trim()) vkPickCat(el.value.trim());
+}
+
 // ── Init ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
   vkInitFavBtns();
   vkRenderRecent();
+});
+document.addEventListener('click', function(e) {
+  var rc = e.target.closest && e.target.closest('.recent-card');
+  if (rc && rc.dataset.rid) openVideo(rc.dataset.rid);
 });
 </script>
 </body>
