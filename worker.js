@@ -467,6 +467,130 @@ nav {
   .search-bar { flex-direction: column; }
   .admin-table th:nth-child(3), .admin-table td:nth-child(3) { display: none; }
 }
+
+/* FAV BUTTON ON CARD */
+.fav-btn {
+  position:absolute;top:5px;left:5px;z-index:2;
+  width:26px;height:26px;border-radius:50%;
+  background:rgba(0,0,0,0.55);border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:0.9rem;line-height:1;
+  -webkit-tap-highlight-color:transparent;
+  transition:transform 0.15s,background 0.15s;
+}
+.fav-btn:active { transform:scale(0.82); }
+.fav-btn.is-fav { background:rgba(251,191,36,0.3); }
+
+/* SELECT CHECKBOX ON CARD */
+.card-chk {
+  position:absolute;top:5px;right:5px;z-index:3;
+  width:20px;height:20px;border-radius:50%;
+  background:rgba(0,0,0,0.55);border:2px solid rgba(255,255,255,0.45);
+  display:none;align-items:center;justify-content:center;
+  font-size:0.6rem;color:#fff;pointer-events:none;
+}
+body.sel-mode .card-chk { display:flex; }
+.video-card.vk-sel { border-color:var(--accent);box-shadow:0 0 0 2px rgba(124,111,247,0.4); }
+
+/* CONTEXT MENU */
+.ctx-overlay { position:fixed;inset:0;z-index:498; }
+.ctx-menu {
+  position:fixed;z-index:499;background:var(--bg2);border:1px solid var(--border);
+  border-radius:12px;padding:6px;min-width:196px;
+  box-shadow:0 12px 40px rgba(0,0,0,0.55);
+  animation:ctxIn 0.14s ease;
+}
+@keyframes ctxIn { from{opacity:0;transform:scale(0.9)} to{opacity:1;transform:scale(1)} }
+.ctx-item {
+  display:flex;align-items:center;gap:10px;padding:11px 14px;
+  border-radius:8px;font-size:0.875rem;cursor:pointer;
+  transition:background 0.12s;color:var(--text);
+  -webkit-tap-highlight-color:transparent;
+}
+.ctx-item:hover,.ctx-item:active { background:var(--bg3); }
+.ctx-sep { height:1px;background:var(--border);margin:4px 8px; }
+
+/* MULTI-SELECT BAR */
+.multi-bar {
+  position:fixed;bottom:0;left:0;right:0;z-index:300;
+  background:var(--bg2);border-top:1px solid var(--border);
+  padding:12px 14px;padding-bottom:max(12px,env(safe-area-inset-bottom));
+  display:none;align-items:center;gap:8px;
+  box-shadow:0 -6px 24px rgba(0,0,0,0.4);
+}
+.multi-bar.on { display:flex; }
+.multi-bar-info { flex:1;font-size:0.875rem;font-weight:600; }
+
+/* MODAL FAV BUTTON */
+.modal-fav-btn {
+  background:var(--bg3);border:1px solid var(--border);color:var(--text);
+  width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:1rem;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  -webkit-tap-highlight-color:transparent;transition:all 0.15s;
+}
+.modal-fav-btn.is-fav { background:rgba(251,191,36,0.2);border-color:rgba(251,191,36,0.4); }
+
+/* RECENT PLAY SECTION */
+.recent-sec { padding:10px 0 4px; }
+.recent-sec-hd {
+  font-size:0.72rem;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:0.06em;
+  margin-bottom:8px;display:flex;align-items:center;gap:8px;
+}
+.recent-clear-btn {
+  font-size:0.7rem;color:var(--muted);cursor:pointer;
+  padding:2px 7px;border-radius:4px;border:1px solid var(--border);
+  background:none;-webkit-tap-highlight-color:transparent;
+}
+.recent-clear-btn:hover { color:var(--danger);border-color:var(--danger); }
+.recent-row {
+  display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;padding-bottom:6px;
+}
+.recent-row::-webkit-scrollbar { display:none; }
+.recent-card { flex-shrink:0;width:106px;cursor:pointer;-webkit-tap-highlight-color:transparent; }
+.recent-card:active { opacity:0.75; }
+.recent-thumb {
+  width:106px;height:60px;border-radius:6px;overflow:hidden;
+  background:var(--bg3);position:relative;margin-bottom:4px;
+}
+.recent-thumb img,.recent-thumb video { width:100%;height:100%;object-fit:cover;display:block; }
+.recent-ph {
+  width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,var(--bg3),#1a1a2e);font-size:1.2rem;
+}
+.recent-title {
+  font-size:0.67rem;color:var(--text);line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.recent-meta { font-size:0.6rem;color:var(--muted);margin-top:2px; }
+
+/* CATEGORY SHEET */
+.cat-overlay {
+  position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.7);
+  display:flex;align-items:flex-end;justify-content:center;
+}
+.cat-sheet {
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:16px 16px 0 0;width:100%;max-width:500px;
+  padding:20px 16px;padding-bottom:max(20px,env(safe-area-inset-bottom));
+  animation:slideUp 0.2s ease;
+}
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.cat-sheet-title { font-size:1rem;font-weight:700;margin-bottom:12px; }
+.cat-chips { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px; }
+.cat-chip {
+  padding:5px 12px;border-radius:20px;font-size:0.78rem;font-weight:500;
+  border:1px solid var(--border);background:transparent;color:var(--muted);
+  cursor:pointer;transition:all 0.15s;-webkit-tap-highlight-color:transparent;
+}
+.cat-chip:hover,.cat-chip:active { border-color:var(--accent);color:var(--accent);background:rgba(124,111,247,0.1); }
+.cat-custom-row { display:flex;gap:8px;margin-bottom:12px; }
+.cat-custom-row input {
+  flex:1;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);font-size:0.9rem;outline:none;
+}
+.cat-custom-row input:focus { border-color:var(--accent); }
 `;
 
 // ── HTML Layout ───────────────────────────────────────────────────────────────
@@ -502,21 +626,20 @@ function layout(title, body, { isAdmin = false, navExtra = "" } = {}) {
 </nav>
 ${body}
 <script>
-// Video modal
+// ── Modal ──────────────────────────────────────────────────────────
 function openVideo(id) {
-  const modal = document.getElementById('modal-'+id);
+  var modal = document.getElementById('modal-'+id);
   if (!modal) return;
-  const wrap = modal.querySelector('.embed-wrap');
+  var wrap = modal.querySelector('.embed-wrap');
   if (wrap && !wrap.firstChild) {
-    const src = wrap.dataset.src;
-    const type = wrap.dataset.type;
+    var src = wrap.dataset.src, type = wrap.dataset.type;
     if (type === 'mp4') {
-      const vid = document.createElement('video');
+      var vid = document.createElement('video');
       vid.src = src; vid.controls = true; vid.autoplay = true; vid.playsInline = true;
       vid.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000';
       wrap.appendChild(vid);
     } else {
-      const fr = document.createElement('iframe');
+      var fr = document.createElement('iframe');
       fr.src = src; fr.allowFullscreen = true;
       fr.allow = 'autoplay; encrypted-media'; fr.loading = 'lazy';
       wrap.appendChild(fr);
@@ -524,24 +647,278 @@ function openVideo(id) {
   }
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
+  vkSaveRecent(id);
+  vkRefreshFavBtn(id);
 }
 function closeModal(id) {
-  const m = document.getElementById('modal-'+id);
+  var m = document.getElementById('modal-'+id);
   if (!m) return;
   m.style.display = 'none';
   document.body.style.overflow = '';
-  const wrap = m.querySelector('.embed-wrap');
-  if (wrap) wrap.innerHTML = '';  // destroy player → stops all audio/video
+  var wrap = m.querySelector('.embed-wrap');
+  if (wrap) wrap.innerHTML = '';
 }
-document.addEventListener('keydown', e => {
+document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
-    document.querySelectorAll('.modal-overlay').forEach(m => {
+    document.querySelectorAll('.modal-overlay').forEach(function(m) {
       m.style.display = 'none';
-      const wrap = m.querySelector('.embed-wrap');
+      var wrap = m.querySelector('.embed-wrap');
       if (wrap) wrap.innerHTML = '';
     });
     document.body.style.overflow = '';
+    vkCloseCtx();
   }
+});
+
+// ── LocalStorage helpers ───────────────────────────────────────────
+var VK_FAV_KEY = 'vk_favs', VK_RECENT_KEY = 'vk_recent';
+function vkGetFavs() {
+  try { return new Set(JSON.parse(localStorage.getItem(VK_FAV_KEY) || '[]')); } catch(e) { return new Set(); }
+}
+function vkSetFavs(s) {
+  try { localStorage.setItem(VK_FAV_KEY, JSON.stringify(Array.from(s))); } catch(e) {}
+}
+function vkGetRecent() {
+  try { return JSON.parse(localStorage.getItem(VK_RECENT_KEY) || '[]'); } catch(e) { return []; }
+}
+function vkSetRecent(arr) {
+  try { localStorage.setItem(VK_RECENT_KEY, JSON.stringify(arr)); } catch(e) {}
+}
+
+// ── Favorites ──────────────────────────────────────────────────────
+function toggleFav(id) {
+  var favs = vkGetFavs();
+  if (favs.has(id)) { favs.delete(id); } else { favs.add(id); }
+  vkSetFavs(favs);
+  vkRefreshFavBtn(id);
+  if (_favFilterOn) {
+    var card = document.querySelector('.video-card[data-id="' + id + '"]');
+    if (card) card.style.display = favs.has(id) ? '' : 'none';
+  }
+}
+function vkRefreshFavBtn(id) {
+  var favs = vkGetFavs();
+  var isFav = favs.has(id);
+  var star = isFav ? '\\u2605' : '\\u2606';
+  var cb = document.getElementById('favbtn-'+id);
+  var mb = document.getElementById('mfav-'+id);
+  if (cb) { cb.textContent = star; cb.classList.toggle('is-fav', isFav); }
+  if (mb) { mb.textContent = star; mb.classList.toggle('is-fav', isFav); }
+}
+function vkInitFavBtns() {
+  var favs = vkGetFavs();
+  favs.forEach(function(id) { vkRefreshFavBtn(id); });
+}
+
+// ── Fav filter toggle ──────────────────────────────────────────────
+var _favFilterOn = false;
+function vkToggleFavFilter(btn) {
+  _favFilterOn = !_favFilterOn;
+  if (btn) btn.classList.toggle('active', _favFilterOn);
+  var favs = vkGetFavs();
+  document.querySelectorAll('.video-card').forEach(function(card) {
+    var id = card.dataset.id;
+    card.style.display = (_favFilterOn && (!id || !favs.has(id))) ? 'none' : '';
+  });
+  var pag = document.getElementById('vk-pagination');
+  if (pag) pag.style.display = _favFilterOn ? 'none' : '';
+}
+
+// ── Recent play ────────────────────────────────────────────────────
+function vkSaveRecent(id) {
+  var card = document.querySelector('.video-card[data-id="' + id + '"]');
+  var title = card ? (card.dataset.title || id) : id;
+  var thumb = card ? (card.dataset.thumb || '') : '';
+  var rawurl = card ? (card.dataset.rawurl || '') : '';
+  var page = (typeof VK_PAGE !== 'undefined' ? VK_PAGE : 1);
+  var cat = (typeof VK_CAT !== 'undefined' ? VK_CAT : '');
+  var q = (typeof VK_Q !== 'undefined' ? VK_Q : '');
+  var recent = vkGetRecent().filter(function(r) { return r.id !== id; });
+  recent.unshift({ id: id, title: title, thumb: thumb, rawurl: rawurl, ts: Date.now(), page: page, cat: cat, q: q });
+  if (recent.length > 20) recent.length = 20;
+  vkSetRecent(recent);
+}
+function vkTimeAgo(ts) {
+  var diff = Date.now() - ts;
+  var m = Math.floor(diff / 60000);
+  if (m < 1) return 'baru saja';
+  if (m < 60) return m + 'm lalu';
+  var h = Math.floor(m / 60);
+  if (h < 24) return h + 'j lalu';
+  return Math.floor(h / 24) + 'h lalu';
+}
+function vkRenderRecent() {
+  var wrap = document.getElementById('vk-recent-wrap');
+  if (!wrap) return;
+  var recent = vkGetRecent();
+  if (!recent.length) { wrap.innerHTML = ''; return; }
+  var html = '<div class="recent-sec"><div class="recent-sec-hd">Terakhir Ditonton <button class="recent-clear-btn" onclick="vkClearRecent()">Hapus</button></div><div class="recent-row">';
+  for (var i = 0; i < recent.length; i++) {
+    var r = recent[i];
+    var isMp4 = r.rawurl && r.rawurl.indexOf('.mp4') !== -1;
+    var tHtml;
+    if (isMp4 && r.rawurl) {
+      tHtml = '<video src="' + r.rawurl + '" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;display:block" onloadedmetadata="this.currentTime=0.001"></video>';
+    } else if (r.thumb) {
+      tHtml = '<img src="' + r.thumb + '" style="width:100%;height:100%;object-fit:cover;display:block" loading="lazy" onerror="this.parentNode.innerHTML=\'<div class=recent-ph>&#9654;</div>\'">';
+    } else {
+      tHtml = '<div class="recent-ph">&#9654;</div>';
+    }
+    var safeTitle = r.title.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    var pageMeta = 'Hal.' + r.page + (r.cat ? ' \u00b7 ' + r.cat : '') + (r.q ? ' \u00b7 "' + r.q + '"' : '');
+    html += '<div class="recent-card" onclick="openVideo(\'' + r.id + '\')">';
+    html += '<div class="recent-thumb">' + tHtml + '</div>';
+    html += '<div class="recent-title">' + safeTitle + '</div>';
+    html += '<div class="recent-meta">' + vkTimeAgo(r.ts) + ' &middot; ' + pageMeta + '</div>';
+    html += '</div>';
+  }
+  html += '</div></div>';
+  wrap.innerHTML = html;
+}
+function vkClearRecent() { vkSetRecent([]); vkRenderRecent(); }
+
+// ── Long-press & context menu ──────────────────────────────────────
+var _lpTimer = null, _lpFired = false, _ctxId = null;
+function vkTouchStart(e, id) {
+  _lpFired = false;
+  clearTimeout(_lpTimer);
+  var touch = e.touches ? e.touches[0] : e;
+  var cx = touch.clientX, cy = touch.clientY;
+  _lpTimer = setTimeout(function() {
+    _lpFired = true;
+    if (navigator.vibrate) navigator.vibrate(30);
+    vkShowCtxAt(cx, cy, id);
+  }, 500);
+}
+function vkTouchEnd(e) {
+  clearTimeout(_lpTimer);
+  if (_lpFired) { e.preventDefault(); _lpFired = false; }
+}
+function vkCtxMenu(e, id) { _ctxId = id; vkShowCtxAt(e.clientX, e.clientY, id); }
+function vkCardClick(e, id) {
+  if (_lpFired) { _lpFired = false; return; }
+  if (document.body.classList.contains('sel-mode')) { vkToggleSel(id); return; }
+  openVideo(id);
+}
+function vkShowCtxAt(x, y, id) {
+  _ctxId = id;
+  var favs = vkGetFavs();
+  var isFav = favs.has(id);
+  vkCloseCtx();
+  var ov = document.createElement('div');
+  ov.className = 'ctx-overlay'; ov.onclick = vkCloseCtx;
+  document.body.appendChild(ov);
+  var menu = document.createElement('div');
+  menu.className = 'ctx-menu'; menu.id = 'vk-ctx';
+  menu.innerHTML =
+    '<div class="ctx-item" onclick="vkCtxFav()">' + (isFav ? '\\u2605 Hapus dari Favorit' : '\\u2606 Tambah ke Favorit') + '</div>' +
+    '<div class="ctx-item" onclick="vkCtxCat()">&#128193; Pindah Kategori</div>' +
+    '<div class="ctx-sep"></div>' +
+    '<div class="ctx-item" onclick="vkCtxSel()">&#9745; Pilih</div>';
+  document.body.appendChild(menu);
+  var mw = 200, mh = 160;
+  var left = Math.max(8, Math.min(x, window.innerWidth - mw - 8));
+  var top = Math.max(8, Math.min(y + 8, window.innerHeight - mh - 8));
+  menu.style.left = left + 'px'; menu.style.top = top + 'px';
+}
+function vkCloseCtx() {
+  var m = document.getElementById('vk-ctx');
+  var o = document.querySelector('.ctx-overlay');
+  if (m) m.remove(); if (o) o.remove();
+}
+function vkCtxFav() { vkCloseCtx(); if (_ctxId) toggleFav(_ctxId); }
+function vkCtxCat() { vkCloseCtx(); if (_ctxId) vkShowCatSheet([_ctxId]); }
+function vkCtxSel() { vkCloseCtx(); if (_ctxId) { vkEnterSelMode(); vkToggleSel(_ctxId); } }
+
+// ── Multi-select ───────────────────────────────────────────────────
+var _selSet = new Set();
+function vkEnterSelMode() {
+  document.body.classList.add('sel-mode');
+  _selSet.clear(); vkUpdateMultiBar();
+}
+function vkExitSelMode() {
+  document.body.classList.remove('sel-mode');
+  _selSet.clear();
+  document.querySelectorAll('.video-card.vk-sel').forEach(function(c) { c.classList.remove('vk-sel'); });
+  document.querySelectorAll('.card-chk').forEach(function(c) { c.textContent = ''; });
+  vkUpdateMultiBar();
+}
+function vkToggleSel(id) {
+  var card = document.querySelector('.video-card[data-id="' + id + '"]');
+  var chk = document.getElementById('chk-' + id);
+  if (_selSet.has(id)) {
+    _selSet.delete(id);
+    if (card) card.classList.remove('vk-sel');
+    if (chk) chk.textContent = '';
+  } else {
+    _selSet.add(id);
+    if (card) card.classList.add('vk-sel');
+    if (chk) chk.textContent = '\\u2713';
+  }
+  vkUpdateMultiBar();
+}
+function vkUpdateMultiBar() {
+  var bar = document.getElementById('vk-multi-bar');
+  if (!bar) return;
+  var inSel = document.body.classList.contains('sel-mode');
+  bar.classList.toggle('on', inSel);
+  var info = bar.querySelector('.multi-bar-info');
+  if (info) info.textContent = _selSet.size + ' dipilih';
+}
+function vkSelFavAll() {
+  var favs = vkGetFavs();
+  _selSet.forEach(function(id) { favs.add(id); vkRefreshFavBtn(id); });
+  vkSetFavs(favs); vkExitSelMode();
+}
+function vkSelCat() { if (_selSet.size) vkShowCatSheet(Array.from(_selSet)); }
+
+// ── Category sheet ─────────────────────────────────────────────────
+var _catIds = [];
+function vkShowCatSheet(ids) {
+  _catIds = ids;
+  var cats = (typeof VK_CATS !== 'undefined' ? VK_CATS : []);
+  var chipsHtml = cats.map(function(c) {
+    var sc = c.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    return '<button class="cat-chip" onclick="vkPickCat(this.dataset.cat)" data-cat="' + c.replace(/"/g,'&quot;') + '">' + sc + '</button>';
+  }).join('');
+  vkCloseCatSheet();
+  var ov = document.createElement('div');
+  ov.className = 'cat-overlay'; ov.id = 'vk-cat-ov';
+  ov.onclick = function(e) { if (e.target === ov) vkCloseCatSheet(); };
+  ov.innerHTML =
+    '<div class="cat-sheet">' +
+    '<div class="cat-sheet-title">Pindah ke Kategori (' + ids.length + ' video)</div>' +
+    '<div class="cat-chips">' + chipsHtml + '</div>' +
+    '<div class="cat-custom-row">' +
+    '<input type="text" id="vk-cat-inp" placeholder="Kategori baru...">' +
+    '<button class="btn btn-primary btn-sm" onclick="var v=document.getElementById(\'vk-cat-inp\').value.trim();if(v)vkPickCat(v)">OK</button>' +
+    '</div>' +
+    '<button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="vkCloseCatSheet()">Batal</button>' +
+    '</div>';
+  document.body.appendChild(ov);
+}
+function vkCloseCatSheet() { var o = document.getElementById('vk-cat-ov'); if (o) o.remove(); }
+function vkPickCat(cat) {
+  if (!cat) return;
+  vkCloseCatSheet();
+  var ids = _catIds.slice();
+  var done = 0;
+  ids.forEach(function(id) {
+    fetch('/api/move-cat', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({id: id, category: cat})
+    }).then(function() {
+      done++;
+      if (done === ids.length) { vkExitSelMode(); location.reload(); }
+    }).catch(function() { done++; });
+  });
+}
+
+// ── Init ───────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  vkInitFavBtns();
+  vkRenderRecent();
 });
 </script>
 </body>
@@ -590,14 +967,26 @@ function renderVideoCard(v) {
 
   const playerSrc = escHtml(isMp4 ? v.url : (embed || v.url));
   const playerType = isMp4 ? "mp4" : "iframe";
-
   const durBadge = v.duration ? `<div class="duration-badge">${fmtDuration(v.duration)}</div>` : "";
 
+  const vid = escHtml(v.id);
+  const vtitle = escHtml(v.title);
+  const vthumb = escHtml(thumb || "");
+  const vrawurl = escHtml(v.url);
+  const vcat = escHtml(v.category || "");
+
   return `
-<div class="video-card" onclick="openVideo('${escHtml(v.id)}')">
+<div class="video-card" data-id="${vid}" data-title="${vtitle}" data-thumb="${vthumb}" data-rawurl="${vrawurl}" data-cat="${vcat}"
+  onclick="vkCardClick(event,'${vid}')"
+  ontouchstart="vkTouchStart(event,'${vid}')"
+  ontouchend="vkTouchEnd(event)"
+  ontouchcancel="vkTouchEnd(event)"
+  oncontextmenu="vkCtxMenu(event,'${vid}');return false">
   <div class="video-thumb">
     ${thumbHtml}
     ${durBadge}
+    <button class="fav-btn" id="favbtn-${vid}" onclick="event.stopPropagation();toggleFav('${vid}')" aria-label="Favorit">&#9734;</button>
+    <div class="card-chk" id="chk-${vid}"></div>
   </div>
   <div class="video-info">
     ${v.category ? `<div class="video-category">${escHtml(v.category)}</div>` : ""}
@@ -607,11 +996,14 @@ function renderVideoCard(v) {
   </div>
 </div>
 <!-- Modal -->
-<div class="modal-overlay" id="modal-${escHtml(v.id)}" style="display:none" onclick="if(event.target===this)closeModal('${escHtml(v.id)}')">
+<div class="modal-overlay" id="modal-${vid}" style="display:none" onclick="if(event.target===this)closeModal('${vid}')">
   <div class="modal">
     <div class="modal-header">
       <div></div>
-      <button class="modal-close" onclick="closeModal('${escHtml(v.id)}')">&times;</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="modal-fav-btn" id="mfav-${vid}" onclick="toggleFav('${vid}')" aria-label="Favorit">&#9734;</button>
+        <button class="modal-close" onclick="closeModal('${vid}')">&times;</button>
+      </div>
     </div>
     <div class="embed-wrap" data-src="${playerSrc}" data-type="${playerType}"></div>
     <div class="modal-body">
@@ -643,16 +1035,19 @@ async function renderHome(req, env) {
     error = e.message;
   }
 
+  const qParam = search ? "q=" + encodeURIComponent(search) + "&" : "";
   const filterBtns = [
-    `<button class="filter-btn ${!category ? "active" : ""}" onclick="location.href='/?${search ? "q=" + encodeURIComponent(search) + "&" : ""}'" >Semua</button>`,
+    `<button class="filter-btn ${!category ? "active" : ""}" onclick="location.href='/?${qParam}'">Semua</button>`,
+    `<button class="filter-btn" id="fav-filter-btn" onclick="vkToggleFavFilter(this)">&#9733; Favorit</button>`,
     ...categories.map(cat =>
-      `<button class="filter-btn ${category === cat ? "active" : ""}" onclick="location.href='/?${search ? "q=" + encodeURIComponent(search) + "&" : ""}cat=${encodeURIComponent(cat)}'">${escHtml(cat)}</button>`
+      `<button class="filter-btn ${category === cat ? "active" : ""}" onclick="location.href='/?${qParam}cat=${encodeURIComponent(cat)}'">${escHtml(cat)}</button>`
     ),
   ].join("");
 
   const cards = (videos || []).map(renderVideoCard).join("");
 
   const body = `
+<script>var VK_CATS=${JSON.stringify(categories)};var VK_PAGE=${page};var VK_CAT=${JSON.stringify(category)};var VK_Q=${JSON.stringify(search)};</script>
 <div class="hero">
   <h1>Koleksi Video</h1>
   <p>Temukan dan nikmati video pilihan terbaik kami</p>
@@ -663,19 +1058,26 @@ async function renderHome(req, env) {
   </form>
 </div>
 <div class="container">
+  <div id="vk-recent-wrap"></div>
   ${error ? `<div class="alert alert-error">Gagal memuat: ${escHtml(error)}</div>` : ""}
   <div class="filters">${filterBtns}</div>
   ${videos && videos.length > 0
-    ? `<div class="video-grid">${cards}</div>`
-    : `<div class="empty"><div class="empty-icon">📭</div><h3>Belum ada video</h3><p>${search ? "Tidak ada hasil untuk pencarian kamu." : "Belum ada video yang ditambahkan."}</p></div>`
+    ? `<div class="video-grid" id="vk-grid">${cards}</div>`
+    : `<div class="empty"><div class="empty-icon">&#128269;</div><h3>Belum ada video</h3><p>${search ? "Tidak ada hasil untuk pencarian kamu." : "Belum ada video yang ditambahkan."}</p></div>`
   }
   ${videos && videos.length === limit
-    ? `<div class="pagination">
-        ${page > 1 ? `<a class="page-btn" href="?${search ? "q=" + encodeURIComponent(search) + "&" : ""}${category ? "cat=" + encodeURIComponent(category) + "&" : ""}page=${page - 1}">←</a>` : ""}
+    ? `<div class="pagination" id="vk-pagination">
+        ${page > 1 ? `<a class="page-btn" href="?${qParam}${category ? "cat=" + encodeURIComponent(category) + "&" : ""}page=${page - 1}">&#8592;</a>` : ""}
         <span class="page-btn active">${page}</span>
-        <a class="page-btn" href="?${search ? "q=" + encodeURIComponent(search) + "&" : ""}${category ? "cat=" + encodeURIComponent(category) + "&" : ""}page=${page + 1}">→</a>
+        <a class="page-btn" href="?${qParam}${category ? "cat=" + encodeURIComponent(category) + "&" : ""}page=${page + 1}">&#8594;</a>
       </div>` : ""
   }
+</div>
+<div class="multi-bar" id="vk-multi-bar">
+  <span class="multi-bar-info">0 dipilih</span>
+  <button class="btn btn-ghost btn-sm" onclick="vkSelFavAll()">&#9733; Favorit</button>
+  <button class="btn btn-ghost btn-sm" onclick="vkSelCat()">&#128193; Kategori</button>
+  <button class="btn btn-ghost btn-sm" onclick="vkExitSelMode()">Batal</button>
 </div>`;
 
   return new Response(layout("Koleksi Video", body, { isAdmin: true }), {
@@ -1273,6 +1675,24 @@ export default {
     // ── GET /
     if (path === "/" && method === "GET") {
       return renderHome(req, env);
+    }
+
+    // ── POST /api/move-cat — update video category
+    if (path === "/api/move-cat" && method === "POST") {
+      try {
+        const body = await req.json();
+        const id = (body.id || "").trim();
+        const category = (body.category || "").trim();
+        if (!id) return new Response(JSON.stringify({ error: "Missing id" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        await supabaseFetch(`${SUPABASE_TABLE}?id=eq.${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ category }),
+          prefer: "return=minimal",
+        }, supabaseKey);
+        return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+      }
     }
 
     // ── Admin routes (already authenticated via global guard above)
