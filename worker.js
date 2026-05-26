@@ -35,6 +35,25 @@ async function supabaseFetch(path, options = {}, supabaseKey) {
   return null;
 }
 
+async function getVideoCount(supabaseKey, { search = "", category = "" } = {}) {
+  let qs = `select=id&limit=1`;
+  if (search) qs += `&or=(title.ilike.*${encodeURIComponent(search)}*,description.ilike.*${encodeURIComponent(search)}*)`;
+  if (category) qs += `&category=eq.${encodeURIComponent(category)}`;
+  const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?${qs}`;
+  const res = await fetch(url, {
+    headers: {
+      apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
+      Prefer: "count=exact",
+    },
+  });
+  if (!res.ok) return null;
+  const cr = res.headers.get("Content-Range");
+  if (!cr) return null;
+  const m = cr.match(/\/(\d+)$/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 async function getVideos(supabaseKey, { search = "", category = "", limit = 50, offset = 0 } = {}) {
   let qs = `select=*&order=created_at.desc&limit=${limit}&offset=${offset}`;
   if (search) qs += `&or=(title.ilike.*${encodeURIComponent(search)}*,description.ilike.*${encodeURIComponent(search)}*)`;
@@ -1089,7 +1108,7 @@ async function renderRecentPage(req, env) {
     recent.splice(idx, 1);
     recent.unshift({id:r.id,title:r.title,thumb:r.thumb||'',rawurl:r.rawurl||'',ts:Date.now(),page:r.page||1,cat:r.cat||'',q:r.q||''});
     sr(recent);
-    var isMp4 = r.rawurl && /\.mp4(\?|$)/i.test(r.rawurl);
+    var isMp4 = r.rawurl && r.rawurl.toLowerCase().indexOf('.mp4') !== -1;
     var emb = document.getElementById('rp-embed');
     emb.innerHTML = '';
     if (isMp4 && r.rawurl) {
@@ -1120,7 +1139,7 @@ async function renderRecentPage(req, env) {
   var html = '';
   for (var i = 0; i < recent.length; i++) {
     var r = recent[i];
-    var isMp4 = r.rawurl && /\.mp4(\?|$)/i.test(r.rawurl);
+    var isMp4 = r.rawurl && r.rawurl.toLowerCase().indexOf('.mp4') !== -1;
     var tHtml;
     if (isMp4 && r.rawurl) {
       tHtml = '<video src="'+esc(r.rawurl)+'" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;display:block" onloadedmetadata="this.currentTime=0.001"></video>';
@@ -1245,11 +1264,12 @@ async function renderAdmin(req, env, flash = "") {
   const url = new URL(req.url);
   const search = url.searchParams.get("q") || "";
 
-  let videos = [], categories = [];
+  let videos = [], categories = [], totalCount = null;
   try {
-    [videos, categories] = await Promise.all([
+    [videos, categories, totalCount] = await Promise.all([
       getVideos(supabaseKey, { search, limit: 100 }),
       getCategories(supabaseKey),
+      getVideoCount(supabaseKey, { search }),
     ]);
   } catch (e) {
     flash = "Gagal memuat data: " + e.message;
@@ -1287,7 +1307,7 @@ async function renderAdmin(req, env, flash = "") {
   </div>
   ${flash ? `<div class="alert ${flash.startsWith("Berhasil") ? "alert-success" : "alert-error"}" style="margin-top:20px">${escHtml(flash)}</div>` : ""}
   <div class="stats">
-    <div class="stat-card"><div class="stat-num">${(videos || []).length}</div><div class="stat-label">Total Video</div></div>
+    <div class="stat-card"><div class="stat-num">${totalCount !== null ? totalCount : (videos || []).length}</div><div class="stat-label">Total Video</div></div>
     <div class="stat-card"><div class="stat-num">${categories.length}</div><div class="stat-label">Kategori</div></div>
   </div>
 
