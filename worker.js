@@ -540,6 +540,33 @@ body.sel-mode .card-chk { display:flex; }
 .multi-bar.on { display:flex; }
 .multi-bar-info { flex:1;font-size:0.875rem;font-weight:600; }
 
+/* VIDEO ERROR NOTIFICATION */
+.vk-err-notif {
+  position:fixed;bottom:0;left:0;right:0;z-index:9999;
+  background:#1a0f0f;border-top:2px solid var(--danger);
+  padding:12px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom));
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  box-shadow:0 -6px 32px rgba(249,112,102,0.25);
+  animation:errSlideUp 0.25s ease;
+}
+@keyframes errSlideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.vk-err-notif-icon { font-size:1.2rem;flex-shrink:0; }
+.vk-err-notif-msg { flex:1;font-size:0.85rem;color:var(--text);min-width:160px; }
+.vk-err-notif-msg b { color:var(--danger); }
+.vk-err-notif-actions { display:flex;gap:8px;flex-shrink:0; }
+.vk-err-del-btn {
+  padding:7px 14px;border-radius:7px;font-size:0.8rem;font-weight:600;
+  background:var(--danger);color:#fff;border:none;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:opacity 0.15s;
+}
+.vk-err-del-btn:hover { opacity:0.85; }
+.vk-err-skip-btn {
+  padding:7px 14px;border-radius:7px;font-size:0.8rem;font-weight:600;
+  background:var(--bg3);color:var(--muted);border:1px solid var(--border);cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.vk-err-skip-btn:hover { color:var(--text); }
+
 /* MODAL FAV BUTTON */
 .modal-fav-btn {
   background:var(--bg3);border:1px solid var(--border);color:var(--text);
@@ -645,6 +672,58 @@ function layout(title, body, { isAdmin = false, navExtra = "" } = {}) {
 </nav>
 ${body}
 <script>
+var VK_IS_ADMIN = ${isAdmin ? 'true' : 'false'};
+
+// ── Video Error Notification ───────────────────────────────────────
+var _vkErrNotif = null;
+function vkVideoError(id, title) {
+  vkDismissError();
+  var notif = document.createElement('div');
+  notif.className = 'vk-err-notif';
+  notif.id = 'vk-err-notif';
+  var delBtn = VK_IS_ADMIN
+    ? '<button class="vk-err-del-btn" onclick="vkDeleteErrorVideo(\''+id+'\')">🗑️ Hapus</button>'
+    : '';
+  notif.innerHTML =
+    '<span class="vk-err-notif-icon">⚠️</span>' +
+    '<div class="vk-err-notif-msg"><b>Video tidak ditemukan atau error</b><br><span style="font-size:0.78rem;color:var(--muted)">' + (title||id) + '</span></div>' +
+    '<div class="vk-err-notif-actions">' + delBtn + '<button class="vk-err-skip-btn" onclick="vkDismissError()">Abaikan</button></div>';
+  document.body.appendChild(notif);
+  _vkErrNotif = { el: notif, id: id };
+}
+function vkDismissError() {
+  var old = document.getElementById('vk-err-notif');
+  if (old) old.remove();
+  _vkErrNotif = null;
+}
+async function vkDeleteErrorVideo(id) {
+  var btn = document.querySelector('.vk-err-del-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menghapus...'; }
+  try {
+    var fd = new FormData();
+    fd.append('id', id);
+    var res = await fetch('/admin/delete', { method: 'POST', body: fd });
+    if (res.ok || res.redirected) {
+      var card = document.querySelector('.video-card[data-id="'+id+'"]');
+      if (card) {
+        var modal = document.getElementById('modal-'+id);
+        if (modal) modal.remove();
+        card.style.transition = 'opacity 0.3s';
+        card.style.opacity = '0';
+        setTimeout(function() { card.remove(); }, 300);
+      }
+      closeModal(id);
+      vkDismissError();
+    } else {
+      if (btn) { btn.disabled = false; btn.textContent = '🗑️ Hapus'; }
+      alert('Gagal menghapus video. Status: ' + res.status);
+    }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '🗑️ Hapus'; }
+    alert('Error: ' + e.message);
+  }
+}
+
 // ── Modal ──────────────────────────────────────────────────────────
 function openVideo(id) {
   var modal = document.getElementById('modal-'+id);
@@ -652,18 +731,29 @@ function openVideo(id) {
   var wrap = modal.querySelector('.embed-wrap');
   if (wrap && !wrap.firstChild) {
     var src = wrap.dataset.src, type = wrap.dataset.type;
+    var card = document.querySelector('.video-card[data-id="'+id+'"]');
+    var title = card ? (card.dataset.title || id) : id;
     if (type === 'mp4') {
       var vid = document.createElement('video');
       vid.src = src; vid.controls = true; vid.autoplay = true; vid.playsInline = true;
       vid.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000';
+      vid.onerror = function() { vkVideoError(id, title); };
       wrap.appendChild(vid);
     } else {
       var fr = document.createElement('iframe');
       fr.src = src; fr.allowFullscreen = true;
       fr.allow = 'autoplay; encrypted-media'; fr.loading = 'lazy';
       wrap.appendChild(fr);
+      // Probe raw URL via HEAD to detect 404 for non-mp4 (e.g. CDN links wrapped in embed)
+      var rawurl = card ? card.dataset.rawurl : '';
+      if (rawurl && rawurl.indexOf('cdn.videy.co') !== -1) {
+        fetch(rawurl, { method: 'HEAD', mode: 'no-cors' }).catch(function() {
+          vkVideoError(id, title);
+        });
+      }
     }
   }
+  vkDismissError();
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
   vkSaveRecent(id);
@@ -676,6 +766,7 @@ function closeModal(id) {
   document.body.style.overflow = '';
   var wrap = m.querySelector('.embed-wrap');
   if (wrap) wrap.innerHTML = '';
+  vkDismissError();
 }
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
@@ -686,6 +777,7 @@ document.addEventListener('keydown', function(e) {
     });
     document.body.style.overflow = '';
     vkCloseCtx();
+    vkDismissError();
   }
 });
 
