@@ -675,53 +675,95 @@ ${body}
 var VK_IS_ADMIN = ${isAdmin ? 'true' : 'false'};
 
 // ── Video Error Notification ───────────────────────────────────────
-var _vkErrNotif = null;
+var _vkBrokenSet = {};   // id → title
+var _vkBrokenTimer = null;
+
+function vkThumbError(el) {
+  var card = el.closest ? el.closest('.video-card') : null;
+  if (!card) {
+    var p = el.parentNode;
+    while (p && !p.classList.contains('video-card')) p = p.parentNode;
+    card = p;
+  }
+  if (!card) return;
+  var id = card.dataset.id;
+  var title = card.dataset.title || id;
+  if (!id || _vkBrokenSet[id]) return;
+  _vkBrokenSet[id] = title || id;
+  card.style.outline = '2px solid var(--danger)';
+  card.style.opacity = '0.55';
+  clearTimeout(_vkBrokenTimer);
+  _vkBrokenTimer = setTimeout(vkShowBrokenNotif, 1800);
+}
+
 function vkVideoError(id, title) {
+  if (!_vkBrokenSet[id]) {
+    _vkBrokenSet[id] = title || id;
+    var card = document.querySelector('.video-card[data-id="'+id+'"]');
+    if (card) { card.style.outline = '2px solid var(--danger)'; card.style.opacity = '0.55'; }
+  }
+  vkShowBrokenNotif();
+}
+
+function vkShowBrokenNotif() {
+  var ids = Object.keys(_vkBrokenSet);
+  if (!ids.length) return;
   vkDismissError();
+  var n = ids.length;
   var notif = document.createElement('div');
   notif.className = 'vk-err-notif';
   notif.id = 'vk-err-notif';
   var delBtn = VK_IS_ADMIN
-    ? '<button class="vk-err-del-btn" onclick="vkDeleteErrorVideo(\''+id+'\')">🗑️ Hapus</button>'
+    ? '<button class="vk-err-del-btn" onclick="vkDeleteAllBroken()">🗑️ Hapus Semua (' + n + ')</button>'
     : '';
   notif.innerHTML =
     '<span class="vk-err-notif-icon">⚠️</span>' +
-    '<div class="vk-err-notif-msg"><b>Video tidak ditemukan atau error</b><br><span style="font-size:0.78rem;color:var(--muted)">' + (title||id) + '</span></div>' +
-    '<div class="vk-err-notif-actions">' + delBtn + '<button class="vk-err-skip-btn" onclick="vkDismissError()">Abaikan</button></div>';
+    '<div class="vk-err-notif-msg"><b>' + n + ' video tidak ditemukan / error</b>' +
+    '<br><span style="font-size:0.78rem;color:var(--muted)">Terdeteksi otomatis saat load thumbnail</span></div>' +
+    '<div class="vk-err-notif-actions">' + delBtn +
+    '<button class="vk-err-skip-btn" onclick="vkDismissError()">Abaikan</button></div>';
   document.body.appendChild(notif);
-  _vkErrNotif = { el: notif, id: id };
 }
+
 function vkDismissError() {
   var old = document.getElementById('vk-err-notif');
   if (old) old.remove();
-  _vkErrNotif = null;
 }
-async function vkDeleteErrorVideo(id) {
+
+async function vkDeleteAllBroken() {
+  var ids = Object.keys(_vkBrokenSet);
+  if (!ids.length) return;
   var btn = document.querySelector('.vk-err-del-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menghapus...'; }
-  try {
-    var fd = new FormData();
-    fd.append('id', id);
-    var res = await fetch('/admin/delete', { method: 'POST', body: fd });
-    if (res.ok || res.redirected) {
-      var card = document.querySelector('.video-card[data-id="'+id+'"]');
-      if (card) {
-        var modal = document.getElementById('modal-'+id);
-        if (modal) modal.remove();
-        card.style.transition = 'opacity 0.3s';
-        card.style.opacity = '0';
-        setTimeout(function() { card.remove(); }, 300);
-      }
-      closeModal(id);
-      vkDismissError();
-    } else {
-      if (btn) { btn.disabled = false; btn.textContent = '🗑️ Hapus'; }
-      alert('Gagal menghapus video. Status: ' + res.status);
-    }
-  } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = '🗑️ Hapus'; }
-    alert('Error: ' + e.message);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menghapus 0/' + ids.length + '...'; }
+  var success = 0, fail = 0;
+  for (var i = 0; i < ids.length; i++) {
+    var id = ids[i];
+    try {
+      var fd = new FormData();
+      fd.append('id', id);
+      var res = await fetch('/admin/delete', { method: 'POST', body: fd });
+      if (res.ok || res.redirected) {
+        var card = document.querySelector('.video-card[data-id="'+id+'"]');
+        if (card) {
+          var modal = document.getElementById('modal-'+id);
+          if (modal) modal.remove();
+          card.style.transition = 'opacity 0.3s';
+          card.style.opacity = '0';
+          (function(c){ setTimeout(function(){ c.remove(); }, 350); })(card);
+        }
+        success++;
+      } else { fail++; }
+    } catch(e) { fail++; }
+    if (btn) btn.textContent = '⏳ Menghapus ' + (i+1) + '/' + ids.length + '...';
   }
+  _vkBrokenSet = {};
+  vkDismissError();
+  if (fail > 0) alert('Berhasil hapus ' + success + ', gagal ' + fail + ' video.');
+}
+
+async function vkDeleteErrorVideo(id) {
+  _vkBrokenSet[id] = _vkBrokenSet[id] || id;
+  await vkDeleteAllBroken();
 }
 
 // ── Modal ──────────────────────────────────────────────────────────
@@ -1082,7 +1124,7 @@ function renderVideoCard(v) {
   const playIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
 
   const thumbHtml = isMp4
-    ? `<video class="thumb-vid" src="${escHtml(v.url)}" muted playsinline preload="metadata" onloadedmetadata="this.currentTime=0.001"></video>
+    ? `<video class="thumb-vid" src="${escHtml(v.url)}" muted playsinline preload="metadata" onloadedmetadata="this.currentTime=0.001" onerror="vkThumbError(this)"></video>
        <div class="thumb-play-overlay"><div class="play-icon">${playIcon}</div></div>`
     : thumb
       ? `<img src="${escHtml(thumb)}" alt="${escHtml(v.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
