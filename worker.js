@@ -1411,7 +1411,7 @@ async function renderAdmin(req, env, flash = "") {
       <div id="bulk-step1">
         <div class="form-group">
           <label>Paste link-link videy di sini (satu per baris atau campur dengan teks lain)</label>
-          <textarea id="bulk-input" rows="8" placeholder="cdn.videy.co/hQF0u32U1.mp4&#10;https://cdn.videy.co/xYz123.mp4&#10;https://videy.co/v?id=hQF0u32U1&#10;https://videvideoy.site/u3lun&#10;https://other-host.com/video.mp4&#10;&#10;Format yang didukung:&#10;• cdn.videy.co/{id}.mp4 → langsung dipakai&#10;• URL .mp4 lainnya → langsung dipakai&#10;• Link dengan ?id= → dikonversi ke CDN" style="width:100%;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical"></textarea>
+          <textarea id="bulk-input" rows="8" placeholder="cdn.videy.co/hQF0u32U1.mp4&#10;https://cdn.videy.co/xYz123.mp4&#10;https://videy.co/v?id=hQF0u32U1&#10;https://domain.com/video/?=hQF0u32U1&#10;https://domain.com/watch?v=hQF0u32U1&#10;https://other-host.com/video.mp4&#10;&#10;Format yang didukung:&#10;• cdn.videy.co/{id}.mp4 → langsung dipakai&#10;• URL .mp4 lainnya → langsung dipakai&#10;• Link dengan ?id= atau &id= → dikonversi ke CDN&#10;• Link dengan ={id} di query string → dikonversi ke CDN" style="width:100%;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical"></textarea>
         </div>
         <div id="bulk-scan-info" style="display:none;margin-bottom:10px;font-size:0.82rem;color:var(--text);padding:10px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--bg2)"></div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -1645,6 +1645,18 @@ function bulkScan() {
         continue;
       }
 
+      // Pattern 3b: any =VALUE in query string (e.g. ?={id}, ?v={id}, ?file={id})
+      // catches URLs like https://domain.com/video/?=hQF0u32U1 or ?key=hQF0u32U1
+      if (/^https?:\\/\\//i.test(token)) {
+        var eqMatch = token.match(/[?&][^=]*=([A-Za-z0-9_\\-]{6,20})(?:[&#]|$)/);
+        if (eqMatch) {
+          var vid3 = eqMatch[1];
+          var fullUrl3b = 'https://cdn.videy.co/' + vid3 + '.mp4';
+          if (!seen[fullUrl3b]) { seen[fullUrl3b] = true; found.push({ id: vid3, cdnUrl: fullUrl3b, direct: false }); }
+          continue;
+        }
+      }
+
       // Pattern 4: plain alphanumeric ID (6-16 chars, looks like a videy ID)
       if (/^[A-Za-z0-9_\\-]{6,20}$/.test(token) && token.indexOf('.') === -1) {
         var fullUrl3 = 'https://cdn.videy.co/' + token + '.mp4';
@@ -1653,7 +1665,7 @@ function bulkScan() {
     }
 
     if (!found.length) {
-      info.innerHTML = '❌ Tidak ada link yang dikenali.<br><small>Format yang didukung: <b>cdn.videy.co/ID.mp4</b>, URL <b>.mp4</b> langsung, link dengan <b>?id=...</b>, atau plain <b>ID</b> videy.</small>';
+      info.innerHTML = '❌ Tidak ada link yang dikenali.<br><small>Format yang didukung: <b>cdn.videy.co/ID.mp4</b>, URL <b>.mp4</b> langsung, link dengan <b>?id=...</b>, link dengan <b>={id}</b> di query string, atau plain <b>ID</b> videy.</small>';
       return;
     }
 
