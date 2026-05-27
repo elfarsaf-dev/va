@@ -1646,8 +1646,8 @@ function bulkScan() {
       }
 
       // Pattern 3b: any =VALUE in query string (e.g. ?={id}, ?v={id}, ?file={id})
-      // catches URLs like https://domain.com/video/?=hQF0u32U1 or ?key=hQF0u32U1
-      if (/^https?:\\/\\//i.test(token)) {
+      // catches URLs like domain.com/video/?=hQF0u32U1 or https://domain.com/watch?v=hQF0u32U1
+      if (token.indexOf('=') !== -1 && token.indexOf('.') !== -1) {
         var eqMatch = token.match(/[?&][^=]*=([A-Za-z0-9_\\-]{6,20})(?:[&#]|$)/);
         if (eqMatch) {
           var vid3 = eqMatch[1];
