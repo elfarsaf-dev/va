@@ -775,6 +775,8 @@ function openVideo(id) {
     var src = wrap.dataset.src, type = wrap.dataset.type;
     var card = document.querySelector('.video-card[data-id="'+id+'"]');
     var title = card ? (card.dataset.title || id) : id;
+    // Pause semua thumbnail dulu biar bandwidth bebas
+    document.querySelectorAll('video.thumb-vid').forEach(function(tv) { try { tv.pause(); } catch(e){} });
     if (type === 'mp4') {
       var vid = document.createElement('video');
       vid.src = src; vid.controls = true; vid.autoplay = true; vid.playsInline = true;
@@ -809,6 +811,7 @@ function closeModal(id) {
   var wrap = m.querySelector('.embed-wrap');
   if (wrap) wrap.innerHTML = '';
   vkDismissError();
+  vkResumeVisibleThumbs();
 }
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
@@ -820,8 +823,55 @@ document.addEventListener('keydown', function(e) {
     document.body.style.overflow = '';
     vkCloseCtx();
     vkDismissError();
+    vkResumeVisibleThumbs();
   }
 });
+
+// ── Thumbnail lazy-loader (Intersection Observer) ──────────────────
+var _vkThumbObs = null;
+function vkInitThumbObs() {
+  if (!window.IntersectionObserver) {
+    // Fallback: langsung load semua
+    document.querySelectorAll('video.thumb-vid[data-src]').forEach(function(v) { vkLoadThumb(v); });
+    return;
+  }
+  _vkThumbObs = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      var v = entry.target;
+      if (entry.isIntersecting) {
+        vkLoadThumb(v);
+      } else {
+        try { v.pause(); } catch(e) {}
+      }
+    });
+  }, { rootMargin: '120px' });
+  document.querySelectorAll('video.thumb-vid[data-src]').forEach(function(v) {
+    _vkThumbObs.observe(v);
+  });
+}
+function vkLoadThumb(v) {
+  if (!v.src && v.dataset.src) {
+    v.src = v.dataset.src;
+    v.preload = 'metadata';
+    v.onloadedmetadata = function() { try { v.currentTime = 0.001; } catch(e) {} };
+  } else if (v.paused && v.readyState >= 1) {
+    // sudah punya frame, tidak perlu load ulang
+  }
+}
+function vkResumeVisibleThumbs() {
+  if (!_vkThumbObs) return;
+  // Trigger ulang observer agar thumbnail visible kembali aktif
+  document.querySelectorAll('video.thumb-vid').forEach(function(v) {
+    _vkThumbObs.unobserve(v);
+    _vkThumbObs.observe(v);
+  });
+}
+// Init saat DOM siap
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', vkInitThumbObs);
+} else {
+  vkInitThumbObs();
+}
 
 // ── LocalStorage helpers ───────────────────────────────────────────
 var VK_FAV_KEY = 'vk_favs', VK_RECENT_KEY = 'vk_recent';
@@ -1124,7 +1174,7 @@ function renderVideoCard(v) {
   const playIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
 
   const thumbHtml = isMp4
-    ? `<video class="thumb-vid" src="${escHtml(v.url)}" muted playsinline preload="metadata" onloadedmetadata="this.currentTime=0.001" onerror="vkThumbError(this)"></video>
+    ? `<video class="thumb-vid" data-src="${escHtml(v.url)}" muted playsinline preload="none" onerror="vkThumbError(this)"></video>
        <div class="thumb-play-overlay"><div class="play-icon">${playIcon}</div></div>`
     : thumb
       ? `<img src="${escHtml(thumb)}" alt="${escHtml(v.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
