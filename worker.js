@@ -791,6 +791,104 @@ async function vkDeleteErrorVideo(id) {
   await vkDeleteAllBroken();
 }
 
+// ── Fast parallel fetch (bypass browser video throttle) ───────────
+async function vkFastLoad(url, vid, bufLoaded, spinner, onPlayingUpdate) {
+  var _blobUrl = null;
+  var _fallback = function() {
+    if (_blobUrl) { try { URL.revokeObjectURL(_blobUrl); } catch(e){} }
+    vid.src = url;
+    vid.load();
+    vid.play().catch(function(){});
+    spinner.style.display = 'none';
+    bufLoaded.style.transition = '';
+  };
+
+  try {
+    // HEAD: cek ukuran file & dukungan Range
+    var fileSize = 0, supportsRange = false;
+    try {
+      var h = await fetch(url, { method: 'HEAD' });
+      fileSize = parseInt(h.headers.get('content-length') || '0');
+      supportsRange = (h.headers.get('accept-ranges') || '').indexOf('bytes') !== -1;
+    } catch(e) {}
+
+    // Timeout fallback: kalau 25 detik belum selesai, pakai direct src
+    var _timeoutId = setTimeout(function() {
+      console.warn('[vkFastLoad] timeout, fallback ke direct src');
+      _fallback();
+    }, 25000);
+
+    bufLoaded.style.transition = 'none';
+
+    if (fileSize && supportsRange) {
+      // ── 4 koneksi paralel via Range requests ──
+      var N = 4;
+      var chunkSize = Math.ceil(fileSize / N);
+      var buffers = new Array(N).fill(null);
+      var downloaded = 0;
+
+      await Promise.all(buffers.map(function(_, i) {
+        var start = i * chunkSize;
+        var end = Math.min(start + chunkSize - 1, fileSize - 1);
+        return fetch(url, { headers: { 'Range': 'bytes=' + start + '-' + end } })
+          .then(function(r) { return r.arrayBuffer(); })
+          .then(function(buf) {
+            buffers[i] = buf;
+            downloaded += buf.byteLength;
+            bufLoaded.style.width = Math.min((downloaded / fileSize) * 100, 100) + '%';
+          });
+      }));
+
+      clearTimeout(_timeoutId);
+      var blob = new Blob(buffers.map(function(b) { return new Uint8Array(b); }), { type: 'video/mp4' });
+      _blobUrl = URL.createObjectURL(blob);
+
+    } else {
+      // ── Single fetch stream (jika Range tidak didukung) ──
+      var r = await fetch(url);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var contentLength = parseInt(r.headers.get('content-length') || '0');
+      var reader = r.body.getReader();
+      var chunks = [];
+      var received = 0;
+      while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+        chunks.push(result.value);
+        received += result.value.length;
+        if (contentLength) bufLoaded.style.width = Math.min((received / contentLength) * 100, 100) + '%';
+      }
+      clearTimeout(_timeoutId);
+      var blob2 = new Blob(chunks, { type: 'video/mp4' });
+      _blobUrl = URL.createObjectURL(blob2);
+    }
+
+    // Setelah download selesai: play dari blob
+    bufLoaded.style.width = '100%';
+    bufLoaded.style.transition = '';
+    spinner.style.display = 'none';
+
+    // Switch buffer bar ke mode playback progress
+    if (onPlayingUpdate) {
+      vid.onprogress = onPlayingUpdate;
+      vid.ontimeupdate = onPlayingUpdate;
+    }
+
+    // Revoke blob saat video unload
+    vid.addEventListener('emptied', function() {
+      if (_blobUrl) { try { URL.revokeObjectURL(_blobUrl); _blobUrl = null; } catch(e){} }
+    }, { once: true });
+
+    vid.src = _blobUrl;
+    vid.load();
+    vid.play().catch(function(){});
+
+  } catch(err) {
+    console.warn('[vkFastLoad] error, fallback:', err.message);
+    _fallback();
+  }
+}
+
 // ── Modal ──────────────────────────────────────────────────────────
 function openVideo(id) {
   var modal = document.getElementById('modal-'+id);
@@ -856,10 +954,13 @@ function openVideo(id) {
       vid.onplaying   = function() { clearTimeout(_stallTimer); spinner.style.display = 'none'; };
       vid.oncanplay   = function() { spinner.style.display = 'none'; };
 
-      vid.src = src; // Set src paling akhir setelah semua handler siap
       wrap.appendChild(vid);
       wrap.appendChild(spinner);
       wrap.appendChild(bufTrack);
+
+      // Gunakan fast-fetch (4 koneksi paralel) agar tidak kena throttle video element
+      spinner.style.display = 'block';
+      vkFastLoad(src, vid, bufLoaded, spinner, updateBufBar);
       // Pause thumbnail SETELAH video modal klaim koneksinya
       setTimeout(function() {
         document.querySelectorAll('video.thumb-vid').forEach(function(tv) { try { tv.pause(); } catch(e){} });
