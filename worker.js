@@ -365,6 +365,31 @@ nav {
 }
 .embed-wrap iframe, .embed-wrap video { width: 100%; height: 100%; border: none; display: block; }
 .thumb-vid { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* BUFFER BAR */
+.vk-buf-track {
+  position:absolute;bottom:0;left:0;right:0;height:3px;
+  background:rgba(255,255,255,0.08);pointer-events:none;z-index:10;
+}
+.vk-buf-loaded {
+  position:absolute;top:0;left:0;height:100%;
+  background:rgba(124,111,247,0.55);transition:width 0.4s linear;width:0%;
+}
+.vk-buf-played {
+  position:absolute;top:0;left:0;height:100%;
+  background:var(--accent);transition:width 0.1s linear;width:0%;
+}
+/* BUFFERING SPINNER */
+.vk-buf-spinner {
+  position:absolute;top:50%;left:50%;
+  width:44px;height:44px;margin:-22px 0 0 -22px;
+  border:3px solid rgba(255,255,255,0.15);
+  border-top-color:var(--accent2);
+  border-radius:50%;
+  animation:vkSpin 0.75s linear infinite;
+  pointer-events:none;z-index:11;display:none;
+}
+@keyframes vkSpin { to { transform:rotate(360deg); } }
 .thumb-play-overlay {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,0.18); pointer-events: none;
@@ -782,7 +807,30 @@ function openVideo(id) {
       vid.controls = true; vid.autoplay = true; vid.playsInline = true;
       vid.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000';
       vid.onerror = function() { vkVideoError(id, title); };
-      // Auto-recover jika download terhenti (stalled/waiting)
+
+      // ── Buffer bar + spinner ──
+      var spinner = document.createElement('div');
+      spinner.className = 'vk-buf-spinner';
+      var bufTrack = document.createElement('div');
+      bufTrack.className = 'vk-buf-track';
+      var bufLoaded = document.createElement('div');
+      bufLoaded.className = 'vk-buf-loaded';
+      var bufPlayed = document.createElement('div');
+      bufPlayed.className = 'vk-buf-played';
+      bufTrack.appendChild(bufLoaded);
+      bufTrack.appendChild(bufPlayed);
+
+      function updateBufBar() {
+        if (vid.duration) {
+          if (vid.buffered.length > 0) {
+            var pct = (vid.buffered.end(vid.buffered.length - 1) / vid.duration) * 100;
+            bufLoaded.style.width = Math.min(pct, 100) + '%';
+          }
+          bufPlayed.style.width = ((vid.currentTime / vid.duration) * 100) + '%';
+        }
+      }
+
+      // ── Auto-recover jika download terhenti ──
       var _stallTimer = null;
       var _recover = function() {
         clearTimeout(_stallTimer);
@@ -794,21 +842,24 @@ function openVideo(id) {
           vid.play().catch(function(){});
         }, 6000);
       };
-      vid.onwaiting = _recover;
-      vid.onstalled = _recover;
-      vid.onsuspend = function() {
-        // Browser suspend download padahal video belum selesai — paksa lanjut
+
+      vid.onprogress  = updateBufBar;
+      vid.ontimeupdate = updateBufBar;
+      vid.onwaiting   = function() { spinner.style.display = 'block'; _recover(); };
+      vid.onstalled   = function() { spinner.style.display = 'block'; _recover(); };
+      vid.onsuspend   = function() {
         if (!vid.ended && vid.buffered.length > 0) {
           var bufferedEnd = vid.buffered.end(vid.buffered.length - 1);
-          var duration = vid.duration;
-          if (duration && bufferedEnd < duration - 2) {
-            _recover();
-          }
+          if (vid.duration && bufferedEnd < vid.duration - 2) { _recover(); }
         }
       };
-      vid.onplaying = function() { clearTimeout(_stallTimer); };
+      vid.onplaying   = function() { clearTimeout(_stallTimer); spinner.style.display = 'none'; };
+      vid.oncanplay   = function() { spinner.style.display = 'none'; };
+
       vid.src = src; // Set src paling akhir setelah semua handler siap
       wrap.appendChild(vid);
+      wrap.appendChild(spinner);
+      wrap.appendChild(bufTrack);
       // Pause thumbnail SETELAH video modal klaim koneksinya
       setTimeout(function() {
         document.querySelectorAll('video.thumb-vid').forEach(function(tv) { try { tv.pause(); } catch(e){} });
