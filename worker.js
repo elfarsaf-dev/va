@@ -672,7 +672,7 @@ function layout(title, body, { isAdmin = false, navExtra = "" } = {}) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>${escHtml(title)} — VideoKoleksi</title>
+<title>${escHtml(title)} — V</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>${CSS}</style>
@@ -1470,7 +1470,7 @@ async function renderHome(req, env) {
   const body = `
 <script>var VK_CATS=${JSON.stringify(categories)};var VK_PAGE=${page};var VK_CAT=${JSON.stringify(category)};var VK_Q=${JSON.stringify(search)};</script>
 <div class="hero">
-  <h1>Koleksi Video</h1>
+  <h1>V</h1>
   <p>Temukan dan nikmati video pilihan terbaik kami</p>
   <form class="search-bar" method="GET" action="/">
     <input type="text" name="q" placeholder="Cari video..." value="${escHtml(search)}">
@@ -1500,7 +1500,7 @@ async function renderHome(req, env) {
   <button class="btn btn-ghost btn-sm" onclick="vkExitSelMode()">Batal</button>
 </div>`;
 
-  return new Response(layout("Koleksi Video", body, { isAdmin: true }), {
+  return new Response(layout("V", body, { isAdmin: true }), {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });
 }
