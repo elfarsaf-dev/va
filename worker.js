@@ -775,19 +775,52 @@ function openVideo(id) {
     var src = wrap.dataset.src, type = wrap.dataset.type;
     var card = document.querySelector('.video-card[data-id="'+id+'"]');
     var title = card ? (card.dataset.title || id) : id;
-    // Pause semua thumbnail dulu biar bandwidth bebas
-    document.querySelectorAll('video.thumb-vid').forEach(function(tv) { try { tv.pause(); } catch(e){} });
     if (type === 'mp4') {
       var vid = document.createElement('video');
-      vid.src = src; vid.controls = true; vid.autoplay = true; vid.playsInline = true;
+      // Set preload="auto" sebelum src agar browser buffer agresif dari awal
+      vid.preload = 'auto';
+      vid.controls = true; vid.autoplay = true; vid.playsInline = true;
       vid.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000';
       vid.onerror = function() { vkVideoError(id, title); };
+      // Auto-recover jika download terhenti (stalled/waiting)
+      var _stallTimer = null;
+      var _recover = function() {
+        clearTimeout(_stallTimer);
+        _stallTimer = setTimeout(function() {
+          if (vid.paused || vid.ended) return;
+          var ct = vid.currentTime;
+          vid.load();
+          vid.currentTime = ct;
+          vid.play().catch(function(){});
+        }, 6000);
+      };
+      vid.onwaiting = _recover;
+      vid.onstalled = _recover;
+      vid.onsuspend = function() {
+        // Browser suspend download padahal video belum selesai — paksa lanjut
+        if (!vid.ended && vid.buffered.length > 0) {
+          var bufferedEnd = vid.buffered.end(vid.buffered.length - 1);
+          var duration = vid.duration;
+          if (duration && bufferedEnd < duration - 2) {
+            _recover();
+          }
+        }
+      };
+      vid.onplaying = function() { clearTimeout(_stallTimer); };
+      vid.src = src; // Set src paling akhir setelah semua handler siap
       wrap.appendChild(vid);
+      // Pause thumbnail SETELAH video modal klaim koneksinya
+      setTimeout(function() {
+        document.querySelectorAll('video.thumb-vid').forEach(function(tv) { try { tv.pause(); } catch(e){} });
+      }, 150);
     } else {
       var fr = document.createElement('iframe');
       fr.src = src; fr.allowFullscreen = true;
       fr.allow = 'autoplay; encrypted-media'; fr.loading = 'lazy';
       wrap.appendChild(fr);
+      setTimeout(function() {
+        document.querySelectorAll('video.thumb-vid').forEach(function(tv) { try { tv.pause(); } catch(e){} });
+      }, 150);
       // Probe raw URL via HEAD to detect 404 for non-mp4 (e.g. CDN links wrapped in embed)
       var rawurl = card ? card.dataset.rawurl : '';
       if (rawurl && rawurl.indexOf('cdn.videy.co') !== -1) {
