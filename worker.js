@@ -891,121 +891,12 @@ async function vkFastLoad(url, vid, bufLoaded, spinner, onPlayingUpdate) {
 
 // ── Modal ──────────────────────────────────────────────────────────
 function openVideo(id) {
-  var modal = document.getElementById('modal-'+id);
-  if (!modal) return;
-  var wrap = modal.querySelector('.embed-wrap');
-  if (wrap && !wrap.firstChild) {
-    var src = wrap.dataset.src, type = wrap.dataset.type;
-    var card = document.querySelector('.video-card[data-id="'+id+'"]');
-    var title = card ? (card.dataset.title || id) : id;
-    if (type === 'mp4') {
-      var vid = document.createElement('video');
-      // Set preload="auto" sebelum src agar browser buffer agresif dari awal
-      vid.preload = 'auto';
-      vid.controls = true; vid.autoplay = true; vid.playsInline = true;
-      vid.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000';
-      vid.onerror = function() { vkVideoError(id, title); };
-
-      // ── Buffer bar + spinner ──
-      var spinner = document.createElement('div');
-      spinner.className = 'vk-buf-spinner';
-      var bufTrack = document.createElement('div');
-      bufTrack.className = 'vk-buf-track';
-      var bufLoaded = document.createElement('div');
-      bufLoaded.className = 'vk-buf-loaded';
-      var bufPlayed = document.createElement('div');
-      bufPlayed.className = 'vk-buf-played';
-      bufTrack.appendChild(bufLoaded);
-      bufTrack.appendChild(bufPlayed);
-
-      function updateBufBar() {
-        if (vid.duration) {
-          if (vid.buffered.length > 0) {
-            var pct = (vid.buffered.end(vid.buffered.length - 1) / vid.duration) * 100;
-            bufLoaded.style.width = Math.min(pct, 100) + '%';
-          }
-          bufPlayed.style.width = ((vid.currentTime / vid.duration) * 100) + '%';
-        }
-      }
-
-      // ── Auto-recover jika download terhenti ──
-      var _stallTimer = null;
-      var _recover = function() {
-        clearTimeout(_stallTimer);
-        _stallTimer = setTimeout(function() {
-          if (vid.paused || vid.ended) return;
-          var ct = vid.currentTime;
-          vid.load();
-          vid.currentTime = ct;
-          vid.play().catch(function(){});
-        }, 6000);
-      };
-
-      vid.onprogress  = updateBufBar;
-      vid.ontimeupdate = updateBufBar;
-      vid.onwaiting   = function() { spinner.style.display = 'block'; _recover(); };
-      vid.onstalled   = function() { spinner.style.display = 'block'; _recover(); };
-      vid.onsuspend   = function() {
-        if (!vid.ended && vid.buffered.length > 0) {
-          var bufferedEnd = vid.buffered.end(vid.buffered.length - 1);
-          if (vid.duration && bufferedEnd < vid.duration - 2) { _recover(); }
-        }
-      };
-      vid.onplaying   = function() { clearTimeout(_stallTimer); spinner.style.display = 'none'; };
-      vid.oncanplay   = function() { spinner.style.display = 'none'; };
-
-      wrap.appendChild(vid);
-      wrap.appendChild(spinner);
-      wrap.appendChild(bufTrack);
-
-      // Gunakan fast-fetch (4 koneksi paralel) agar tidak kena throttle video element
-      spinner.style.display = 'block';
-      vkFastLoad(src, vid, bufLoaded, spinner, updateBufBar);
-      // Pause thumbnail SETELAH video modal klaim koneksinya
-      setTimeout(function() {
-        document.querySelectorAll('video.thumb-vid').forEach(function(tv) { try { tv.pause(); } catch(e){} });
-      }, 150);
-    } else {
-      var fr = document.createElement('iframe');
-      fr.src = src; fr.allowFullscreen = true;
-      fr.allow = 'autoplay; encrypted-media'; fr.loading = 'lazy';
-      wrap.appendChild(fr);
-      setTimeout(function() {
-        document.querySelectorAll('video.thumb-vid').forEach(function(tv) { try { tv.pause(); } catch(e){} });
-      }, 150);
-      // Probe raw URL via HEAD to detect 404 for non-mp4 (e.g. CDN links wrapped in embed)
-      var rawurl = card ? card.dataset.rawurl : '';
-      if (rawurl && rawurl.indexOf('cdn.videy.co') !== -1) {
-        fetch(rawurl, { method: 'HEAD', mode: 'no-cors' }).catch(function() {
-          vkVideoError(id, title);
-        });
-      }
-    }
-  }
-  vkDismissError();
-  modal.style.display = 'flex';
-  document.body.style.overflow = 'hidden';
-  vkSaveRecent(id);
-  vkRefreshFavBtn(id);
-}
-function closeModal(id) {
-  var m = document.getElementById('modal-'+id);
-  if (!m) return;
-  m.style.display = 'none';
-  document.body.style.overflow = '';
-  var wrap = m.querySelector('.embed-wrap');
-  if (wrap) wrap.innerHTML = '';
-  vkDismissError();
-  vkResumeVisibleThumbs();
+  var card = document.querySelector('.video-card[data-id="'+id+'"]');
+  var url = card ? card.dataset.rawurl : '';
+  if (url) { vkSaveRecent(id); window.open(url, '_blank'); }
 }
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
-    document.querySelectorAll('.modal-overlay').forEach(function(m) {
-      m.style.display = 'none';
-      var wrap = m.querySelector('.embed-wrap');
-      if (wrap) wrap.innerHTML = '';
-    });
-    document.body.style.overflow = '';
     vkCloseCtx();
     vkDismissError();
     vkResumeVisibleThumbs();
@@ -1319,7 +1210,11 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 document.addEventListener('click', function(e) {
   var rc = e.target.closest && e.target.closest('.recent-card');
-  if (rc && rc.dataset.rid) openVideo(rc.dataset.rid);
+  if (rc && rc.dataset.rid) {
+    var recent = vkGetRecent();
+    var item = recent.find(function(x) { return x.id === rc.dataset.rid; });
+    if (item && item.rawurl) window.open(item.rawurl, '_blank');
+  }
 });
 </script>
 </body>
@@ -1366,8 +1261,6 @@ function renderVideoCard(v) {
          <div class="thumb-placeholder" style="display:none"><div class="play-icon">${playIcon}</div></div>`
       : `<div class="thumb-placeholder"><div class="play-icon">${playIcon}</div></div>`;
 
-  const playerSrc = escHtml(isMp4 ? v.url : (embed || v.url));
-  const playerType = isMp4 ? "mp4" : "iframe";
   const durBadge = v.duration ? `<div class="duration-badge">${fmtDuration(v.duration)}</div>` : "";
 
   const vid = escHtml(v.id);
@@ -1395,24 +1288,6 @@ function renderVideoCard(v) {
     ${v.description ? `<div class="video-desc">${escHtml(v.description)}</div>` : ""}
     <div class="video-meta">${v.created_at ? timeAgo(v.created_at) : ""}</div>
   </div>
-</div>
-<!-- Modal -->
-<div class="modal-overlay" id="modal-${vid}" style="display:none" onclick="if(event.target===this)closeModal('${vid}')">
-  <div class="modal">
-    <div class="modal-header">
-      <div></div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="modal-fav-btn" id="mfav-${vid}" onclick="toggleFav('${vid}')" aria-label="Favorit">&#9734;</button>
-        <button class="modal-close" onclick="closeModal('${vid}')">&times;</button>
-      </div>
-    </div>
-    <div class="embed-wrap" data-src="${playerSrc}" data-type="${playerType}"></div>
-    <div class="modal-body">
-      ${v.category ? `<div class="modal-category">${escHtml(v.category)}</div>` : ""}
-      <div class="modal-title">${escHtml(v.title)}</div>
-      ${v.description ? `<div class="modal-desc">${escHtml(v.description)}</div>` : ""}
-    </div>
-  </div>
 </div>`;
 }
 
@@ -1433,16 +1308,6 @@ async function renderRecentPage(req, env) {
   </div>
   <div class="video-grid" id="rp-grid"></div>
 </div>
-<div class="modal-overlay" id="rp-modal" style="display:none">
-  <div class="modal">
-    <div class="modal-header">
-      <div></div>
-      <button class="modal-close" onclick="rpCloseModal()">&times;</button>
-    </div>
-    <div class="embed-wrap" id="rp-embed"></div>
-    <div class="modal-body" id="rp-modal-body"></div>
-  </div>
-</div>
 <script>
 (function() {
   var KEY = 'vk_recent';
@@ -1459,44 +1324,6 @@ async function renderRecentPage(req, env) {
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 
   window.rpClear = function() { localStorage.removeItem(KEY); location.reload(); };
-
-  window.rpCloseModal = function() {
-    var m = document.getElementById('rp-modal');
-    if (!m) return;
-    var emb = document.getElementById('rp-embed');
-    if (emb) emb.innerHTML = '';
-    m.style.display = 'none';
-    document.body.style.overflow = '';
-  };
-
-  window.rpOpenModal = function(idx) {
-    var recent = gr();
-    var r = recent[idx];
-    if (!r) return;
-    recent.splice(idx, 1);
-    recent.unshift({id:r.id,title:r.title,thumb:r.thumb||'',rawurl:r.rawurl||'',ts:Date.now(),page:r.page||1,cat:r.cat||'',q:r.q||''});
-    sr(recent);
-    var isMp4 = r.rawurl && r.rawurl.toLowerCase().indexOf('.mp4') !== -1;
-    var emb = document.getElementById('rp-embed');
-    emb.innerHTML = '';
-    if (isMp4 && r.rawurl) {
-      var v = document.createElement('video');
-      v.src = r.rawurl; v.controls = true; v.autoplay = true; v.playsInline = true;
-      v.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000';
-      emb.appendChild(v);
-    } else if (r.rawurl) {
-      var fr = document.createElement('iframe');
-      fr.src = r.rawurl; fr.allowFullscreen = true;
-      fr.allow = 'autoplay; encrypted-media'; fr.loading = 'lazy';
-      emb.appendChild(fr);
-    }
-    var mb = document.getElementById('rp-modal-body');
-    mb.innerHTML = (r.cat ? '<div class="modal-category">'+esc(r.cat)+'</div>' : '') + '<div class="modal-title">'+esc(r.title)+'</div>';
-    var m = document.getElementById('rp-modal');
-    m.style.display = 'flex';
-    document.body.style.overflow = 'hidden';
-    m.onclick = function(e) { if (e.target === m) rpCloseModal(); };
-  };
 
   var recent = gr();
   var grid = document.getElementById('rp-grid');
@@ -1516,7 +1343,7 @@ async function renderRecentPage(req, env) {
     } else {
       tHtml = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2rem;color:var(--muted)">&#9654;</div>';
     }
-    html += '<div class="video-card" style="cursor:pointer" data-ridx="'+i+'">';
+    html += '<div class="video-card" style="cursor:pointer" data-rawurl="'+esc(r.rawurl||'')+'" data-ridx="'+i+'">';
     html += '<div class="video-thumb">'+tHtml+'</div>';
     html += '<div class="video-info">';
     if (r.cat) html += '<div class="video-category">'+esc(r.cat)+'</div>';
@@ -1527,7 +1354,7 @@ async function renderRecentPage(req, env) {
   grid.innerHTML = html;
   grid.addEventListener('click', function(e) {
     var card = e.target.closest('.video-card');
-    if (card && card.dataset.ridx !== undefined) rpOpenModal(parseInt(card.dataset.ridx, 10));
+    if (card && card.dataset.rawurl) window.open(card.dataset.rawurl, '_blank');
   });
 })();
 </script>`;
