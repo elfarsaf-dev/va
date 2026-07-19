@@ -1830,7 +1830,7 @@ function bulkScan() {
       // KECUALI jika URL sudah berakhiran ekstensi video (tangani di Pattern 3)
       var hasVideoExt = /\.(mp4|mov|webm|m3u8|ts|mkv|avi|flv)([\?#]|$)/i.test(token);
       if (!hasVideoExt) {
-        var idMatch = token.match(/[?&]id=([A-Za-z0-9_\\-]+)/);
+        var idMatch = token.match(/=([A-Za-z0-9_\\-]+)/);
         if (idMatch) {
           var vid2 = idMatch[1];
           var fullUrl2 = 'https://cdn.videy.co/' + vid2 + '.mp4';
