@@ -1813,6 +1813,9 @@ function bulkScan() {
     for (var t = 0; t < tokens.length; t++) {
       var token = tokens[t];
 
+      // Skip link shopee
+      if (/shopee/i.test(token)) continue;
+
       // Pattern 1: cdn.videy.co/{id}.mp4 URL
       var cdnMatch = token.match(/cdn\\.videy\\.co\\/([A-Za-z0-9_\\-]+)(?:\\.mp4)?/i);
       if (cdnMatch) {
