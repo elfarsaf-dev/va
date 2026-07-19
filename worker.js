@@ -1607,7 +1607,7 @@ async function renderAdmin(req, env, flash = "") {
       <div id="bulk-step1">
         <div class="form-group">
           <label>Paste link-link videy di sini (satu per baris atau campur dengan teks lain)</label>
-          <textarea id="bulk-input" rows="8" placeholder="https://cdn.videy.co/hQF0u32U1.mp4&#10;https://cdn2.example.com/video/abc123.mp4&#10;https://stream.contoh.com/hls/video.m3u8&#10;https://files.host.com/media/video.webm&#10;videy.co/v?id=hQF0u32U1&#10;hQF0u32U1&#10;&#10;Semua URL http/https didukung langsung.&#10;Plain ID atau link videy.co otomatis dikonversi ke CDN videy." style="width:100%;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical"></textarea>
+          <textarea id="bulk-input" rows="8" placeholder="https://cdn.videy.co/hQF0u32U1.mp4   ← langsung dipakai&#10;https://cdn2.example.com/video/abc.mp4      ← langsung dipakai&#10;https://stream.host.com/video.m3u8          ← langsung dipakai&#10;https://videy.co/v?id=hQF0u32U1            ← ambil ID → cdn.videy.co&#10;https://domain.com/watch?id=hQF0u32U1      ← ambil ID → cdn.videy.co&#10;hQF0u32U1                                  ← plain ID → cdn.videy.co&#10;&#10;Link mengandung id= → otomatis konversi ke CDN videy&#10;Link ekstensi video (.mp4 .mov .webm dll) → langsung dipakai&#10;Link shopee → di-skip otomatis" style="width:100%;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical"></textarea>
         </div>
         <div id="bulk-scan-info" style="display:none;margin-bottom:10px;font-size:0.82rem;color:var(--text);padding:10px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--bg2)"></div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -1825,7 +1825,31 @@ function bulkScan() {
         continue;
       }
 
-      // Pattern 2: any http/https URL — langsung pakai as-is
+      // Pattern 2: URL dengan id= — ambil ID-nya, konversi ke cdn.videy.co
+      // Berlaku untuk link apapun yang mengandung id= di query string
+      // KECUALI jika URL sudah berakhiran ekstensi video (tangani di Pattern 3)
+      var hasVideoExt = /\.(mp4|mov|webm|m3u8|ts|mkv|avi|flv)([\?#]|$)/i.test(token);
+      if (!hasVideoExt) {
+        var idMatch = token.match(/[?&]id=([A-Za-z0-9_\\-]+)/);
+        if (idMatch) {
+          var vid2 = idMatch[1];
+          var fullUrl2 = 'https://cdn.videy.co/' + vid2 + '.mp4';
+          if (vid2.length >= 3 && !seen[fullUrl2]) { seen[fullUrl2] = true; found.push({ id: vid2, cdnUrl: fullUrl2, direct: false }); }
+          continue;
+        }
+      }
+
+      // Pattern 3: direct video file URL (ekstensi video jelas) — langsung pakai
+      if (/^https?:\\/\\/[^\\s"'<>]+\\.(mp4|mov|webm|m3u8|ts|mkv|avi|flv)([\?#][^\\s"'<>]*)?$/i.test(token)) {
+        if (!seen[token]) {
+          seen[token] = true;
+          var vidId = token.replace(/^https?:\\/\\//, '').replace(/[^A-Za-z0-9_\\-]/g, '_').slice(0, 32);
+          found.push({ id: vidId, cdnUrl: token, direct: true });
+        }
+        continue;
+      }
+
+      // Pattern 4: URL http/https lainnya — langsung pakai as-is
       if (/^https?:\\/\\/[^\\s"'<>]+$/i.test(token)) {
         if (!seen[token]) {
           seen[token] = true;
@@ -1835,16 +1859,7 @@ function bulkScan() {
         continue;
       }
 
-      // Pattern 3: ?id= atau &id= (videy.co/v?id=XXX tanpa http)
-      var idMatch = token.match(/[?&]id=([A-Za-z0-9_\\-]+)/);
-      if (idMatch) {
-        var vid2 = idMatch[1];
-        var fullUrl2 = 'https://cdn.videy.co/' + vid2 + '.mp4';
-        if (vid2.length >= 3 && !seen[fullUrl2]) { seen[fullUrl2] = true; found.push({ id: vid2, cdnUrl: fullUrl2, direct: false }); }
-        continue;
-      }
-
-      // Pattern 4: plain videy ID (6-20 chars alphanumeric, tanpa titik)
+      // Pattern 5: plain videy ID (6-20 chars alphanumeric, tanpa titik)
       if (/^[A-Za-z0-9_\\-]{6,20}$/.test(token) && token.indexOf('.') === -1) {
         var fullUrl3 = 'https://cdn.videy.co/' + token + '.mp4';
         if (!seen[fullUrl3]) { seen[fullUrl3] = true; found.push({ id: token, cdnUrl: fullUrl3, direct: false }); }
