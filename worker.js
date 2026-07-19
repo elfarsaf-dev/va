@@ -1150,6 +1150,26 @@ function vkSelFavAll() {
   vkSetFavs(favs); vkExitSelMode();
 }
 function vkSelCat() { if (_selSet.size) vkShowCatSheet(Array.from(_selSet)); }
+async function vkSelDelete() {
+  var ids = Array.from(_selSet);
+  if (!ids.length) return;
+  if (!confirm('Hapus ' + ids.length + ' video yang dipilih?')) return;
+  var success = 0, fail = 0;
+  for (var i = 0; i < ids.length; i++) {
+    var id = ids[i];
+    try {
+      var fd = new FormData(); fd.append('id', id);
+      var res = await fetch('/admin/delete', { method: 'POST', body: fd });
+      if (res.ok || res.redirected) {
+        var card = document.querySelector('.video-card[data-id="' + id + '"]');
+        if (card) { card.style.transition = 'opacity 0.3s'; card.style.opacity = '0'; (function(c){ setTimeout(function(){ c.remove(); }, 350); })(card); }
+        success++;
+      } else { fail++; }
+    } catch(e) { fail++; }
+  }
+  vkExitSelMode();
+  if (fail > 0) alert('Berhasil hapus ' + success + ', gagal ' + fail + ' video.');
+}
 
 // ── Category sheet ─────────────────────────────────────────────────
 var _catIds = [];
@@ -1425,6 +1445,7 @@ async function renderHome(req, env) {
   <span class="multi-bar-info">0 dipilih</span>
   <button class="btn btn-ghost btn-sm" onclick="vkSelFavAll()">&#9733; Favorit</button>
   <button class="btn btn-ghost btn-sm" onclick="vkSelCat()">&#128193; Kategori</button>
+  <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="vkSelDelete()">&#128465; Hapus</button>
   <button class="btn btn-ghost btn-sm" onclick="vkExitSelMode()">Batal</button>
 </div>`;
 
@@ -1849,17 +1870,7 @@ function bulkScan() {
         continue;
       }
 
-      // Pattern 4: URL http/https lainnya — langsung pakai as-is
-      if (/^https?:\\/\\/[^\\s"'<>]+$/i.test(token)) {
-        if (!seen[token]) {
-          seen[token] = true;
-          var urlId = token.replace(/^https?:\\/\\//, '').replace(/[^A-Za-z0-9_\\-]/g, '_').slice(0, 32);
-          found.push({ id: urlId, cdnUrl: token, direct: true });
-        }
-        continue;
-      }
-
-      // Pattern 5: plain videy ID (6-20 chars alphanumeric, tanpa titik)
+      // Pattern 4: plain videy ID (6-20 chars alphanumeric, tanpa titik)
       if (/^[A-Za-z0-9_\\-]{6,20}$/.test(token) && token.indexOf('.') === -1) {
         var fullUrl3 = 'https://cdn.videy.co/' + token + '.mp4';
         if (!seen[fullUrl3]) { seen[fullUrl3] = true; found.push({ id: token, cdnUrl: fullUrl3, direct: false }); }
