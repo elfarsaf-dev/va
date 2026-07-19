@@ -2133,8 +2133,15 @@ async function bulkSubmit() {
       fd.append('description', '');
       if (item.duration) fd.append('duration', String(item.duration));
       var res = await fetch('/admin/add', { method: 'POST', body: fd, headers: { 'X-Bulk-Import': '1' } });
-      var json = await res.json();
-      if (json.ok) { done++; } else { failed++; console.error('Gagal simpan', item.cdnUrl, json.error); }
+      var ct = res.headers.get('content-type') || '';
+      if (ct.indexOf('application/json') !== -1) {
+        // Server baru: balas JSON {ok, error}
+        var json = await res.json();
+        if (json.ok) { done++; } else { failed++; console.error('Gagal simpan', item.cdnUrl, json.error); }
+      } else {
+        // Server lama: ikuti redirect — sukses kalau URL akhir ada 'msg=Berhasil'
+        if (res.redirected && res.url && res.url.indexOf('msg=Berhasil') !== -1) { done++; } else { failed++; }
+      }
     } catch(e) { failed++; console.error('Error bulk item', e); }
     var pct = Math.round(((done + failed) / selected.length) * 100);
     document.getElementById('bulk-progress-bar').style.width = pct + '%';
