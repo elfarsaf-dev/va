@@ -2122,7 +2122,7 @@ async function bulkSubmit() {
   var btn = document.getElementById('bulk-submit-btn');
   btn.disabled = true;
   document.getElementById('bulk-progress').style.display = 'block';
-  var done = 0, failed = 0;
+  var done = 0, failed = 0, lastErr = '';
   for (var j = 0; j < selected.length; j++) {
     var item = selected[j];
     try {
@@ -2135,17 +2135,16 @@ async function bulkSubmit() {
       var res = await fetch('/admin/add', { method: 'POST', body: fd, headers: { 'X-Bulk-Import': '1' } });
       var ct = res.headers.get('content-type') || '';
       if (ct.indexOf('application/json') !== -1) {
-        // Server baru: balas JSON {ok, error}
         var json = await res.json();
-        if (json.ok) { done++; } else { failed++; console.error('Gagal simpan', item.cdnUrl, json.error); }
+        if (json.ok) { done++; } else { failed++; lastErr = json.error || 'error tidak diketahui'; }
       } else {
-        // Server lama: ikuti redirect — sukses kalau URL akhir ada 'msg=Berhasil'
-        if (res.redirected && res.url && res.url.indexOf('msg=Berhasil') !== -1) { done++; } else { failed++; }
+        if (res.redirected && res.url && res.url.indexOf('msg=Berhasil') !== -1) { done++; } else { failed++; lastErr = 'redirect ke ' + res.url; }
       }
-    } catch(e) { failed++; console.error('Error bulk item', e); }
+    } catch(e) { failed++; lastErr = e.message; }
     var pct = Math.round(((done + failed) / selected.length) * 100);
     document.getElementById('bulk-progress-bar').style.width = pct + '%';
-    document.getElementById('bulk-progress-text').textContent = done + '/' + selected.length + ' disimpan' + (failed ? ', ' + failed + ' gagal' : '');
+    var errTxt = lastErr ? ' — Error: ' + lastErr : '';
+    document.getElementById('bulk-progress-text').textContent = done + '/' + selected.length + ' disimpan' + (failed ? ', ' + failed + ' gagal' + errTxt : '');
   }
   document.getElementById('bulk-progress-text').textContent = 'Selesai! ' + done + ' video ditambahkan' + (failed ? ', ' + failed + ' gagal' : '') + '. Memuat ulang...';
   setTimeout(function() { window.location.href = '/admin?msg=Berhasil+menambahkan+' + done + '+video'; }, 1200);
