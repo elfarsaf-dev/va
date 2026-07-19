@@ -2131,7 +2131,6 @@ async function bulkSubmit() {
       fd.append('url', item.cdnUrl);
       fd.append('category', category);
       fd.append('description', '');
-      if (item.duration) fd.append('duration', String(item.duration));
       var res = await fetch('/admin/add', { method: 'POST', body: fd, headers: { 'X-Bulk-Import': '1' } });
       var ct = res.headers.get('content-type') || '';
       if (ct.indexOf('application/json') !== -1) {
