@@ -1607,7 +1607,7 @@ async function renderAdmin(req, env, flash = "") {
       <div id="bulk-step1">
         <div class="form-group">
           <label>Paste link-link videy di sini (satu per baris atau campur dengan teks lain)</label>
-          <textarea id="bulk-input" rows="8" placeholder="cdn.videy.co/hQF0u32U1.mp4&#10;https://cdn.videy.co/xYz123.mp4&#10;https://videy.co/v?id=hQF0u32U1&#10;https://domain.com/video/?=hQF0u32U1&#10;https://domain.com/watch?v=hQF0u32U1&#10;https://other-host.com/video.mp4&#10;&#10;Format yang didukung:&#10;• cdn.videy.co/{id}.mp4 → langsung dipakai&#10;• URL .mp4 lainnya → langsung dipakai&#10;• Link dengan ?id= atau &id= → dikonversi ke CDN&#10;• Link dengan ={id} di query string → dikonversi ke CDN" style="width:100%;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical"></textarea>
+          <textarea id="bulk-input" rows="8" placeholder="https://cdn.videy.co/hQF0u32U1.mp4&#10;https://cdn2.example.com/video/abc123.mp4&#10;https://stream.contoh.com/hls/video.m3u8&#10;https://files.host.com/media/video.webm&#10;videy.co/v?id=hQF0u32U1&#10;hQF0u32U1&#10;&#10;Semua URL http/https didukung langsung.&#10;Plain ID atau link videy.co otomatis dikonversi ke CDN videy." style="width:100%;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical"></textarea>
         </div>
         <div id="bulk-scan-info" style="display:none;margin-bottom:10px;font-size:0.82rem;color:var(--text);padding:10px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--bg2)"></div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -1822,17 +1822,17 @@ function bulkScan() {
         continue;
       }
 
-      // Pattern 2: any other direct .mp4 URL
-      if (/^https?:\\/\\/[^\\s"'<>]+\\.mp4(\\?[^\\s"'<>]*)?$/i.test(token)) {
+      // Pattern 2: any http/https URL — langsung pakai as-is
+      if (/^https?:\\/\\/[^\\s"'<>]+$/i.test(token)) {
         if (!seen[token]) {
           seen[token] = true;
-          var mp4Id = token.replace(/^https?:\\/\\//, '').replace(/[^A-Za-z0-9_\\-]/g, '_').slice(0, 24);
-          found.push({ id: mp4Id, cdnUrl: token, direct: true });
+          var urlId = token.replace(/^https?:\\/\\//, '').replace(/[^A-Za-z0-9_\\-]/g, '_').slice(0, 32);
+          found.push({ id: urlId, cdnUrl: token, direct: true });
         }
         continue;
       }
 
-      // Pattern 3: ?id= or &id= param (e.g. videy.co/v?id=XXX)
+      // Pattern 3: ?id= atau &id= (videy.co/v?id=XXX tanpa http)
       var idMatch = token.match(/[?&]id=([A-Za-z0-9_\\-]+)/);
       if (idMatch) {
         var vid2 = idMatch[1];
@@ -1841,19 +1841,7 @@ function bulkScan() {
         continue;
       }
 
-      // Pattern 3b: any =VALUE in query string (e.g. ?={id}, ?v={id}, ?file={id})
-      // catches URLs like domain.com/video/?=hQF0u32U1 or https://domain.com/watch?v=hQF0u32U1
-      if (token.indexOf('=') !== -1 && token.indexOf('.') !== -1) {
-        var eqMatch = token.match(/[?&][^=]*=([A-Za-z0-9_\\-]{6,20})(?:[&#]|$)/);
-        if (eqMatch) {
-          var vid3 = eqMatch[1];
-          var fullUrl3b = 'https://cdn.videy.co/' + vid3 + '.mp4';
-          if (!seen[fullUrl3b]) { seen[fullUrl3b] = true; found.push({ id: vid3, cdnUrl: fullUrl3b, direct: false }); }
-          continue;
-        }
-      }
-
-      // Pattern 4: plain alphanumeric ID (6-16 chars, looks like a videy ID)
+      // Pattern 4: plain videy ID (6-20 chars alphanumeric, tanpa titik)
       if (/^[A-Za-z0-9_\\-]{6,20}$/.test(token) && token.indexOf('.') === -1) {
         var fullUrl3 = 'https://cdn.videy.co/' + token + '.mp4';
         if (!seen[fullUrl3]) { seen[fullUrl3] = true; found.push({ id: token, cdnUrl: fullUrl3, direct: false }); }
@@ -1861,7 +1849,7 @@ function bulkScan() {
     }
 
     if (!found.length) {
-      info.innerHTML = '❌ Tidak ada link yang dikenali.<br><small>Format yang didukung: <b>cdn.videy.co/ID.mp4</b>, URL <b>.mp4</b> langsung, link dengan <b>?id=...</b>, link dengan <b>={id}</b> di query string, atau plain <b>ID</b> videy.</small>';
+      info.innerHTML = '❌ Tidak ada link yang dikenali.<br><small>Paste URL video langsung (http/https), link videy.co, atau plain ID videy.</small>';
       return;
     }
 
