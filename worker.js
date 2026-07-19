@@ -2132,14 +2132,15 @@ async function bulkSubmit() {
       fd.append('category', category);
       fd.append('description', '');
       if (item.duration) fd.append('duration', String(item.duration));
-      await fetch('/admin/add', { method: 'POST', body: fd });
-      done++;
-    } catch(e) { failed++; }
+      var res = await fetch('/admin/add', { method: 'POST', body: fd, headers: { 'X-Bulk-Import': '1' } });
+      var json = await res.json();
+      if (json.ok) { done++; } else { failed++; console.error('Gagal simpan', item.cdnUrl, json.error); }
+    } catch(e) { failed++; console.error('Error bulk item', e); }
     var pct = Math.round(((done + failed) / selected.length) * 100);
     document.getElementById('bulk-progress-bar').style.width = pct + '%';
     document.getElementById('bulk-progress-text').textContent = done + '/' + selected.length + ' disimpan' + (failed ? ', ' + failed + ' gagal' : '');
   }
-  document.getElementById('bulk-progress-text').textContent = 'Selesai! ' + done + ' video ditambahkan. Memuat ulang...';
+  document.getElementById('bulk-progress-text').textContent = 'Selesai! ' + done + ' video ditambahkan' + (failed ? ', ' + failed + ' gagal' : '') + '. Memuat ulang...';
   setTimeout(function() { window.location.href = '/admin?msg=Berhasil+menambahkan+' + done + '+video'; }, 1200);
 }
 </script>`;
@@ -2247,6 +2248,7 @@ export default {
 
       // POST /admin/add
       if (path === "/admin/add" && method === "POST") {
+        const isBulk = req.headers.get("X-Bulk-Import") === "1";
         try {
           const form = await req.formData();
           const title = (form.get("title") || "").trim();
@@ -2257,8 +2259,10 @@ export default {
           const duration = durationRaw ? parseInt(durationRaw, 10) || null : null;
           if (!title || !videoUrl) throw new Error("Judul dan link wajib diisi.");
           await createVideo({ title, url: videoUrl, category: category || null, description: description || null, ...(duration ? { duration } : {}) }, supabaseKey);
+          if (isBulk) return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } });
           return Response.redirect(new URL("/admin?msg=Berhasil+menambahkan+video", req.url), 303);
         } catch (e) {
+          if (isBulk) return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 400, headers: { "Content-Type": "application/json" } });
           return renderAdmin(req, env, "Gagal menambahkan: " + e.message);
         }
       }
